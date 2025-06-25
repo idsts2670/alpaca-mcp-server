@@ -64,7 +64,7 @@ load_dotenv()
 
 API_KEY = os.getenv("ALPACA_API_KEY")
 API_SECRET = os.getenv("ALPACA_SECRET_KEY")
-PAPER = os.getenv("PAPER", "True")
+ALPACA_PAPER_TRADE = os.getenv("ALPACA_PAPER_TRADE", "True")
 TRADE_API_URL = os.getenv("TRADE_API_URL")
 TRDE_API_WSS = os.getenv("TRDE_API_WSS")
 DATA_API_URL = os.getenv("DATA_API_URL")
@@ -76,7 +76,7 @@ if not API_KEY or not API_SECRET:
 
 # Initialize clients
 # For trading
-trade_client = TradingClient(API_KEY, API_SECRET, paper=PAPER)
+trade_client = TradingClient(API_KEY, API_SECRET, paper=ALPACA_PAPER_TRADE)
 # For historical market data
 stock_historical_data_client = StockHistoricalDataClient(API_KEY, API_SECRET)
 # For streaming market data
