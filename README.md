@@ -324,6 +324,7 @@ To enable **live trading with real funds**, update the following configuration f
 * `get_stock_bars(symbol, days=5, timeframe="1Day", limit=None, start=None, end=None)` – OHLCV historical bars with flexible timeframes (1Min, 5Min, 1Hour, 1Day, etc.)
 * `get_stock_latest_trade(symbol)` – Latest market trade price
 * `get_stock_latest_bar(symbol)` – Most recent OHLC bar
+* `get_stock_snapshot(symbol_or_symbols, feed=None, currency=None)` – Comprehensive snapshot with latest quote, trade, minute bar, daily bar, and previous daily bar
 * `get_stock_trades(symbol, start_time, end_time)` – Trade-level history
 
 ### Orders
@@ -390,35 +391,35 @@ See the "Example Queries" section below for 50 real examples covering everything
 23. Show me the market calendar for next week.
 24. Are there any corporate announcements for major tech stocks this month?
 25. What are the next dividend announcements for SPY?
-26. List earnings announcements coming tomorrow.
 
 ### Historical & Real-time Data
-27. Show me AAPL's daily price history for the last 5 trading days.
-28. What was the closing price of TSLA yesterday?
-29. Get the latest bar for GOOG.
-30. What was the latest trade price for NVDA?
-31. Show me the most recent quote for MSFT.
-32. Retrieve the last 100 trades for AMD.
-33. Show me 1-minute bars for AMZN for the last 2 hours.
-34. Get 5-minute intraday bars for TSLA from last Tuesday through last Friday.
+26. Show me AAPL's daily price history for the last 5 trading days.
+27. What was the closing price of TSLA yesterday?
+28. Get the latest bar for GOOG.
+29. What was the latest trade price for NVDA?
+30. Show me the most recent quote for MSFT.
+31. Retrieve the last 100 trades for AMD.
+32. Show me 1-minute bars for AMZN for the last 2 hours.
+33. Get 5-minute intraday bars for TSLA from last Tuesday through last Friday.
+34. Get a comprehensive stock snapshot for AAPL showing latest quote, trade, minute bar, daily bar, and previous daily bar all in one view.
+35. Compare market snapshots for TSLA, NVDA, and MSFT to analyze their current bid/ask spreads, latest trade prices, and daily performance.
 
 ### Orders
-35. Show me all my open and filled orders from this week.
-36. What orders do I have for AAPL?
-37. List all limit orders I placed in the past 3 days.
-38. Filter all orders by status: filled.
-39. Get me the order history for yesterday.
+36. Show me all my open and filled orders from this week.
+37. What orders do I have for AAPL?
+38. List all limit orders I placed in the past 3 days.
+39. Filter all orders by status: filled.
+40. Get me the order history for yesterday.
 
 ### Watchlists
-40. Create a new watchlist called "Tech Stocks" with AAPL, MSFT, and NVDA.
-41. Update my "Tech Stocks" watchlist to include TSLA and AMZN.
-42. What stocks are in my "Dividend Picks" watchlist?
-43. Remove META from my "Growth Portfolio" watchlist.
-44. List all my existing watchlists.
+41. Create a new watchlist called "Tech Stocks" with AAPL, MSFT, and NVDA.
+42. Update my "Tech Stocks" watchlist to include TSLA and AMZN.
+43. What stocks are in my "Dividend Picks" watchlist?
+44. Remove META from my "Growth Portfolio" watchlist.
+45. List all my existing watchlists.
 
 ### Asset Information
-45. Search for details about the asset 'AAPL'.
-46. List all tradable US large-cap stocks.
+46. Search for details about the asset 'AAPL'.
 47. Show me the top 5 tradable crypto assets by trading volume.
 48. Filter all assets with status 'active'.
 
