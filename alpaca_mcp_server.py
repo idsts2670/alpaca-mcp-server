@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import time
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, Union
@@ -56,8 +57,23 @@ from alpaca.trading.requests import (
 )
 from mcp.server.fastmcp import FastMCP
 
-# Initialize FastMCP server
-mcp = FastMCP("alpaca-trading")
+def detect_pycharm_environment():
+    """
+    Detect if we're running in PyCharm using environment variable.
+    Set MCP_CLIENT=pycharm in your PyCharm MCP configuration.
+    """
+    mcp_client = os.getenv("MCP_CLIENT", "").lower()
+    return mcp_client == "pycharm"
+
+# Initialize FastMCP server with intelligent log level detection
+is_pycharm = detect_pycharm_environment()
+log_level = "ERROR" if is_pycharm else "INFO"
+
+# Optional: Print detection result for debugging (only in non-PyCharm environments)
+if not is_pycharm:
+    print(f"MCP Server starting with log_level={log_level} (PyCharm detected: {is_pycharm})")
+
+mcp = FastMCP("alpaca-trading", log_level=log_level)
 
 # Initialize Alpaca clients using environment variables
 # Import our .env file within the same directory
@@ -813,17 +829,17 @@ async def place_stock_order(
         # Submit order
         order = trade_client.submit_order(order_data)
         return f"""
-Order Placed Successfully:
--------------------------
-Order ID: {order.id}
-Symbol: {order.symbol}
-Side: {order.side}
-Quantity: {order.qty}
-Type: {order.type}
-Time In Force: {order.time_in_force}
-Status: {order.status}
-Client Order ID: {order.client_order_id}
-"""
+                Order Placed Successfully:
+                -------------------------
+                Order ID: {order.id}
+                Symbol: {order.symbol}
+                Side: {order.side}
+                Quantity: {order.qty}
+                Type: {order.type}
+                Time In Force: {order.time_in_force}
+                Status: {order.status}
+                Client Order ID: {order.client_order_id}
+                """
     except Exception as e:
         return f"Error placing order: {str(e)}"
 

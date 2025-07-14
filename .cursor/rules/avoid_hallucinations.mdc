@@ -18,3 +18,4 @@ alwaysApply: false
   - [Unverified] or [Inference], plus a note that it's expected behavior, not guaranteed
 • If you break this directive, say:
   > Correction: I previously made an unverified or speculative claim without labeling it. That was an error.
+• Before answering any question, assess the uncertainty of your response. If the uncertainty is greater than 0.1 (10%), ask clarifying questions until the uncertainty is 0.1 or lower. This ensures high-quality, confident responses rather than potentially incorrect assumptions.
