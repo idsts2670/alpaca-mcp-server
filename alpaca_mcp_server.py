@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import time
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, Union
