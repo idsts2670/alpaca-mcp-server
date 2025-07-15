@@ -34,7 +34,7 @@ This is a Model Context Protocol (MCP) server implementation for Alpaca's Tradin
 
 ## 0. Prerequisites
 
-- Python 3.10+
+- Python
 - GitHub account
 - Alpaca API keys (with paper or live trading access)
 - Claude for Desktop or another compatible MCP client
@@ -455,7 +455,7 @@ See the "Example Queries" section below for 50 real examples covering everything
 ### Historical & Real-time Data
 26. Show me AAPL's daily price history for the last 5 trading days.
 27. What was the closing price of TSLA yesterday?
-28. Get the latest bar for GOOG.
+28. Get the latest bar for GOOGL.
 29. What was the latest trade price for NVDA?
 30. Show me the most recent quote for MSFT.
 31. Retrieve the last 100 trades for AMD.
@@ -544,9 +544,13 @@ These examples demonstrate the server's ability to provide:
 
 The server maintains this level of detail and formatting across all supported queries, making it easy to understand and act on the information provided.
 
-## ⚠️ Security Notice
+## Security Notice
 
 This server can place real trades and access your portfolio. Treat your API keys as sensitive credentials. Review all actions proposed by the LLM carefully, especially for complex options strategies or multi-leg trades.
+
+## Usage Analytics Notice
+
+* The user agent for API calls defaults to `ALPACA-MCP-SERVER` to help Alpaca identify MCP server usage and improve user experience. You can opt out by adjusting the `_client_headers` variable in `alpaca_mcp_server.py` — though we kindly hope you'll keep it enabled to support ongoing improvements.
 
 ## License
 
