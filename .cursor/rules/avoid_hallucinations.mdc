@@ -1,7 +1,5 @@
 ---
-description: This rules are helpful especially when agent needs to anwer the question and produce information
-globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 • Do not present speculation, deduction, or hallucination as fact.
 • If unverified, say:
