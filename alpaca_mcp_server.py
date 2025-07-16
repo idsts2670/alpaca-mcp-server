@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import time
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, Union
@@ -22,6 +23,7 @@ from alpaca.data.requests import (
     StockLatestTradeRequest,
     StockSnapshotRequest,
     StockTradesRequest,
+    OptionChainRequest
 )
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.trading.client import TradingClient
@@ -55,6 +57,18 @@ from alpaca.trading.requests import (
     UpdateWatchlistRequest,
 )
 from mcp.server.fastmcp import FastMCP
+
+# Configure Python path for local imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+github_core_path = os.path.join(current_dir, '.github', 'core')
+if github_core_path not in sys.path:
+    sys.path.insert(0, github_core_path)
+# Import the UserAgentMixin
+from user_agent_mixin import UserAgentMixin
+# Define new classes using the mixin
+class TradingClientSigned(UserAgentMixin, TradingClient): pass
+class StockHistoricalDataClientSigned(UserAgentMixin, StockHistoricalDataClient): pass
+class OptionHistoricalDataClientSigned(UserAgentMixin, OptionHistoricalDataClient): pass
 
 def detect_pycharm_environment():
     """
@@ -92,25 +106,13 @@ if not TRADE_API_KEY or not TRADE_API_SECRET:
 
 # Initialize clients
 # For trading
-trade_client = TradingClient(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE)
+trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE)
 # For historical market data
-stock_historical_data_client = StockHistoricalDataClient(TRADE_API_KEY, TRADE_API_SECRET)
+stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
 # For streaming market data
 stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_override=STREAM_DATA_WSS)
 # For option historical data
-option_historical_data_client = OptionHistoricalDataClient(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-
-# Configure client sessions for performance and compatibility improvements purposes
-_client_headers = {
-    'User-Agent': 'ALPACA-MCP-SERVER',
-    'X-Client-Name': 'alpaca-mcp-server',
-    'X-Client-Version': '1.0.0'
-}
-
-# Apply session configuration to improve API development experience
-trade_client._session.headers.update(_client_headers)
-stock_historical_data_client._session.headers.update(_client_headers)
-option_historical_data_client._session.headers.update(_client_headers)
+option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
 
 # ============================================================================
 # Account Information Tools
@@ -1188,7 +1190,14 @@ async def get_market_calendar(start_date: str, end_date: str) -> str:
         str: Formatted string containing market calendar information
     """
     try:
-        calendar = trade_client.get_calendar(start=start_date, end=end_date)
+        # Convert string dates to date objects
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+        
+        # Create the request object with the correct parameters
+        calendar_request = GetCalendarRequest(start=start_dt, end=end_dt)
+        calendar = trade_client.get_calendar(calendar_request)
+        
         result = f"Market Calendar ({start_date} to {end_date}):\n----------------------------\n"
         for day in calendar:
             result += f"Date: {day.date}, Open: {day.open}, Close: {day.close}\n"
@@ -1263,6 +1272,9 @@ async def get_corporate_announcements(
 async def get_option_contracts(
     underlying_symbol: str,
     expiration_date: Optional[date] = None,
+    expiration_month: Optional[int] = None,
+    expiration_year: Optional[int] = None,
+    expiration_week_start: Optional[date] = None,
     strike_price_gte: Optional[str] = None,
     strike_price_lte: Optional[str] = None,
     type: Optional[ContractType] = None,
@@ -1276,7 +1288,10 @@ async def get_option_contracts(
     
     Args:
         underlying_symbol (str): The symbol of the underlying asset (e.g., 'AAPL')
-        expiration_date (Optional[date]): Optional expiration date for the options
+        expiration_date (Optional[date]): Optional specific expiration date for the options
+        expiration_month (Optional[int]): Optional expiration month (1-12) to get all contracts for that month
+        expiration_year (Optional[int]): Optional expiration year (required if expiration_month is provided)
+        expiration_week_start (Optional[date]): Optional start date of week to find all contracts expiring in that week (Monday-Sunday)
         strike_price_gte (Optional[str]): Optional minimum strike price
         strike_price_lte (Optional[str]): Optional maximum strike price
         type (Optional[ContractType]): Optional contract type (CALL or PUT)
@@ -1298,18 +1313,34 @@ async def get_option_contracts(
     Note:
         This endpoint returns contract specifications and static data. For real-time pricing
         information (bid/ask prices, sizes, etc.), use get_option_latest_quote instead.
+        
+        For month-based queries, use expiration_month and expiration_year instead of expiration_date.
+        For week-based queries, use expiration_week_start to find all contracts expiring in that week.
+        The function will check all dates from Monday through Sunday of that week.
+        
+        When more than 500 contracts are found, a guidance message is displayed instead of 
+        overwhelming output to help users narrow their search criteria.
     """
     try:
+        # Determine the appropriate expiration filtering strategy
+        use_specific_date = expiration_date is not None
+        use_month_filter = expiration_month is not None and expiration_year is not None
+        use_week_filter = expiration_week_start is not None
+        
+        # Create the request object - if filtering by month or week, don't use expiration_date
+        request_expiration_date = expiration_date if use_specific_date and not use_month_filter and not use_week_filter else None
+        
         # Create the request object with all available parameters
+        # Set a higher limit to get more contracts (default is 100, we use 1000 for comprehensive results)
         request = GetOptionContractsRequest(
             underlying_symbols=[underlying_symbol],
-            expiration_date=expiration_date,
+            expiration_date=request_expiration_date,
             strike_price_gte=strike_price_gte,
             strike_price_lte=strike_price_lte,
             type=type,
             status=status,
             root_symbol=root_symbol,
-            limit=limit
+            limit=limit if limit else 1000  # Default to 1000 to get more comprehensive results
         )
         
         # Get the option contracts
@@ -1318,12 +1349,64 @@ async def get_option_contracts(
         if not response or not response.option_contracts:
             return f"No option contracts found for {underlying_symbol} matching the criteria."
         
+        # Filter by month or week if specified
+        contracts_to_display = response.option_contracts
+        if use_month_filter:
+            contracts_to_display = [
+                contract for contract in response.option_contracts 
+                if contract.expiration_date.month == expiration_month and contract.expiration_date.year == expiration_year
+            ]
+            
+            if not contracts_to_display:
+                month_name = date(expiration_year, expiration_month, 1).strftime("%B")
+                return f"No option contracts found for {underlying_symbol} expiring in {month_name} {expiration_year}."
+        
+        elif use_week_filter:
+            # Calculate the week range (Monday to Sunday)
+            from datetime import timedelta
+            
+            # Find the Monday of the week containing expiration_week_start
+            days_since_monday = expiration_week_start.weekday()
+            week_start = expiration_week_start - timedelta(days=days_since_monday)
+            week_end = week_start + timedelta(days=6)  # Sunday
+            
+            contracts_to_display = [
+                contract for contract in response.option_contracts 
+                if week_start <= contract.expiration_date <= week_end
+            ]
+            
+            if not contracts_to_display:
+                return f"No option contracts found for {underlying_symbol} expiring during the week of {week_start.strftime('%B %d, %Y')}."
+        
         # Format the response
-        result = f"Option Contracts for {underlying_symbol}:\n"
+        if use_month_filter:
+            month_name = date(expiration_year, expiration_month, 1).strftime("%B")
+            result = f"Option Contracts for {underlying_symbol} expiring in {month_name} {expiration_year}:\n"
+        elif use_week_filter:
+            from datetime import timedelta
+            days_since_monday = expiration_week_start.weekday()
+            week_start = expiration_week_start - timedelta(days=days_since_monday)
+            week_end = week_start + timedelta(days=6)
+            result = f"Option Contracts for {underlying_symbol} expiring during the week of {week_start.strftime('%B %d')} - {week_end.strftime('%B %d, %Y')}:\n"
+        else:
+            result = f"Option Contracts for {underlying_symbol}:\n"
         result += "----------------------------------------\n"
         
-        for contract in response.option_contracts:
-            result += f"""
+        # Check if there are too many results and provide guidance instead of overwhelming output
+        total_contracts = len(contracts_to_display)
+        max_display_contracts = 500  # Threshold to limit display and show guidance message instead
+        
+        # Sort contracts by expiration date and strike price
+        contracts_to_display.sort(key=lambda x: (x.expiration_date, float(x.strike_price)))
+        
+        if total_contracts > max_display_contracts:
+            # Too many results - provide simple guidance
+            result += f"Found {total_contracts} contracts. For easier viewing, please specify a particular expiration date or strike price range."
+            
+        else:
+            # Normal display for manageable number of results
+            for contract in contracts_to_display:
+                result += f"""
                 Symbol: {contract.symbol}
                 Name: {contract.name}
                 Type: {contract.type}
@@ -1340,6 +1423,18 @@ async def get_option_contracts(
                 Close Price Date: {contract.close_price_date}
                 -------------------------
                 """
+        
+        # Add summary information
+        if use_month_filter:
+            month_name = date(expiration_year, expiration_month, 1).strftime("%B")
+            result += f"\nTotal contracts found for {underlying_symbol} in {month_name} {expiration_year}: {total_contracts}"
+        elif use_week_filter:
+            from datetime import timedelta
+            days_since_monday = expiration_week_start.weekday()
+            week_start = expiration_week_start - timedelta(days=days_since_monday)
+            result += f"\nTotal contracts found for {underlying_symbol} during the week of {week_start.strftime('%B %d, %Y')}: {total_contracts}"
+        else:
+            result += f"\nTotal contracts found for {underlying_symbol}: {total_contracts}"
         
         return result
         

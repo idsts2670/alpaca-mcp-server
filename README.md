@@ -67,6 +67,9 @@ After cloning and activating the virtual environment, your directory structure s
 ```
 alpaca-mcp-server/          ← This is the workspace folder (= project root)
 ├── alpaca_mcp_server.py    ← Script is directly in workspace root
+├── .github/                ← VS Code settings (for VS Code users)
+│ ├── core/                 ← Core utility modules
+│ └── workflows/            ← GitHub Actions workflows
 ├── .vscode/                ← VS Code settings (for VS Code users)
 │   └── mcp.json
 ├── venv/                   ← Virtual environment folder
@@ -396,7 +399,7 @@ To enable **live trading with real funds**, update the following configuration f
 
 ### Options
 
-* `get_option_contracts(underlying_symbol, expiration_date)` – Fetch contracts
+* `get_option_contracts(underlying_symbol, expiration_date=None, expiration_month=None, expiration_year=None, expiration_week_start=None)` – Fetch contracts for specific date, month, or week (automatically provides guidance when >300 results)
 * `get_option_latest_quote(option_symbol)` – Latest bid/ask on contract
 * `get_option_snapshot(symbol_or_symbols)` – Get Greeks and underlying
 * `place_option_market_order(legs, order_class, quantity)` – Execute option strategy
@@ -422,9 +425,9 @@ To enable **live trading with real funds**, update the following configuration f
 See the "Example Queries" section below for 50 real examples covering everything from trading to corporate data to option strategies.
 
 ### Basic Trading
-1. What's my current account balance and buying power?
-2. Show me my current positions.
-3. Buy 10 shares of AAPL at market price.
+1. What's my current account balance and buying power on Alpaca?
+2. Show me my current positions in my Alpaca account.
+3. Buy 5 shares of AAPL at market price.
 4. Sell 5 shares of TSLA with a limit price of $300.
 5. Cancel all open stock orders.
 6. Cancel the order with ID abc123.
@@ -436,13 +439,13 @@ See the "Example Queries" section below for 50 real examples covering everything
 
 ### Option Trading
 12. Show me available option contracts for AAPL expiring next month.
-13. Get the latest quote for AAPL250613C00200000.
-14. Retrieve the option snapshot for SPY250627P00400000.
+13. Get the latest quote for the AAPL250613C00200000 option.
+14. Retrieve the option snapshot for the SPY250627P00400000 option.
 15. Liquidate my position in 2 contracts of QQQ calls expiring next week.
 16. Place a market order to buy 1 call option on AAPL expiring next Friday.
-17. What are the option Greeks for TSLA250620P00500000?
-18. Find all TSLA option contracts with strike prices within 5% of the current market price.
-19. Get all contracts for SPY expiring in June that are call options.
+17. What are the option Greeks for the TSLA250620P00500000 option?
+18. Find TSLA option contracts with strike prices within 5% of the current market price.
+19. Get SPY call options expiring the week of June 16th, 2025, within 10% of market price.
 20. Place a bull call spread using AAPL June 6th options: one with a 190.00 strike and the other with a 200.00 strike.
 
 ### Market Information
@@ -459,7 +462,7 @@ See the "Example Queries" section below for 50 real examples covering everything
 29. What was the latest trade price for NVDA?
 30. Show me the most recent quote for MSFT.
 31. Retrieve the last 100 trades for AMD.
-32. Show me 1-minute bars for AMZN for the last 2 hours.
+32. Show me 1-minute bars for AMZN from the last 2 hours.
 33. Get 5-minute intraday bars for TSLA from last Tuesday through last Friday.
 34. Get a comprehensive stock snapshot for AAPL showing latest quote, trade, minute bar, daily bar, and previous daily bar all in one view.
 35. Compare market snapshots for TSLA, NVDA, and MSFT to analyze their current bid/ask spreads, latest trade prices, and daily performance.
@@ -481,7 +484,7 @@ See the "Example Queries" section below for 50 real examples covering everything
 ### Asset Information
 46. Search for details about the asset 'AAPL'.
 47. Show me the top 5 tradable crypto assets by trading volume.
-48. Filter all assets with status 'active'.
+48. Filter assets with status 'active' for tech stocks.
 
 ### Combined Scenarios
 49. Get today's market clock and show me my buying power before placing a limit buy order for TSLA at $340.
@@ -550,7 +553,7 @@ This server can place real trades and access your portfolio. Treat your API keys
 
 ## Usage Analytics Notice
 
-* The user agent for API calls defaults to `ALPACA-MCP-SERVER` to help Alpaca identify MCP server usage and improve user experience. You can opt out by adjusting the `_client_headers` variable in `alpaca_mcp_server.py` — though we kindly hope you'll keep it enabled to support ongoing improvements.
+The user agent for API calls defaults to 'ALPACA-MCP-SERVER' to help Alpaca identify MCP server usage and improve user experience. You can opt out by modifying the 'USER_AGENT' constant in '.github/core/user_agent_mixin.py' or by removing the 'UserAgentMixin' from the client class definitions in 'alpaca_mcp_server.py' — though we kindly hope you'll keep it enabled to support ongoing improvements.
 
 ## License
 
