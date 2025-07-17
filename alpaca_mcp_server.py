@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import time
+import argparse
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional, Union
 
@@ -56,7 +57,7 @@ from alpaca.trading.requests import (
     TrailingStopOrderRequest,
     UpdateWatchlistRequest,
 )
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 # Configure Python path for local imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -78,13 +79,58 @@ def detect_pycharm_environment():
     mcp_client = os.getenv("MCP_CLIENT", "").lower()
     return mcp_client == "pycharm"
 
+def parse_arguments():
+    """Parse command line arguments for transport configuration."""
+    parser = argparse.ArgumentParser(description="Alpaca MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http", "sse"],
+        default="stdio",
+        help="Transport method to use (default: stdio)"
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to for HTTP transport (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind to for HTTP transport (default: 8000)"
+    )
+    return parser.parse_args()
+
+def setup_transport_config(args):
+    """Setup transport configuration based on command line arguments."""
+    if args.transport == "http":
+        return {
+            "transport": "http",
+            "host": args.host,
+            "port": args.port
+        }
+    elif args.transport == "sse":
+        print(f"Warning: SSE transport is deprecated. Consider using HTTP transport instead.")
+        return {
+            "transport": "sse",
+            "host": args.host,
+            "port": args.port
+        }
+    else:
+        return {
+            "transport": "stdio"
+        }
+
+# Parse arguments early to determine transport
+args = parse_arguments()
+
 # Initialize FastMCP server with intelligent log level detection
 is_pycharm = detect_pycharm_environment()
 log_level = "ERROR" if is_pycharm else "INFO"
 
 # Optional: Print detection result for debugging (only in non-PyCharm environments)
 if not is_pycharm:
-    print(f"MCP Server starting with log_level={log_level} (PyCharm detected: {is_pycharm})")
+    print(f"MCP Server starting with transport={args.transport}, log_level={log_level} (PyCharm detected: {is_pycharm})")
 
 mcp = FastMCP("alpaca-trading", log_level=log_level)
 
@@ -2075,4 +2121,20 @@ def parse_timeframe_with_enums(timeframe_str: str) -> Optional[TimeFrame]:
 
 # Run the server
 if __name__ == "__main__":
-    mcp.run(transport='stdio')
+    # Setup transport configuration based on command line arguments
+    transport_config = setup_transport_config(args)
+    
+    try:
+        # Run server with the specified transport
+        mcp.run(**transport_config)
+    except Exception as e:
+        if args.transport in ["http", "sse"]:
+            print(f"Error starting {args.transport} server on {args.host}:{args.port}: {e}")
+            print("Common solutions:")
+            print(f"1. Ensure port {args.port} is available")
+            print(f"2. Check if another service is using port {args.port}")
+            print("3. Try a different port with --port <port_number>")
+            print("4. For remote access, ensure firewall allows the port")
+        else:
+            print(f"Error starting MCP server: {e}")
+        sys.exit(1)
