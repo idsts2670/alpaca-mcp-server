@@ -57,7 +57,8 @@ from alpaca.trading.requests import (
     TrailingStopOrderRequest,
     UpdateWatchlistRequest,
 )
-from fastmcp import FastMCP
+
+from mcp.server.fastmcp import FastMCP
 
 # Configure Python path for local imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
