@@ -18,3 +18,7 @@ When the user asks to change existing code, keep modifications minimal and focus
 ## Minimal Code Rule
 When a user asks for new code to be designed, start with a minimal and focused implementation. Only modify what is specifically requested, avoiding unnecessary refactoring or additions. Preserve the existing code structure, variable names, and logic patterns unless explicitly asked to change them. After providing the initial minimal draft, you may suggest potential improvements or additional updates.
 
+# Never commit, stage, or push without explicit permission
+Please do not commit, stage, or push any changes unless I explicitly say so.
+Wait for my clear instruction before performing any git-related actions.
+
