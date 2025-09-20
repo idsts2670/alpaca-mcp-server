@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpaca-mcp"
+version = "0.1.0"
+description = "Alpaca MCP server providing trading tools over MCP"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+  "alpaca-py",
+  "mcp",
+  "python-dotenv",
+  "matplotlib",
+  "pandas"
+]
+
+[project.scripts]
+alpaca-mcp = "alpaca_mcp_server:main"
+
+[tool.setuptools]
+py-modules = ["alpaca_mcp_server"]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.5", "black>=24", "pytest>=8", "mypy>=1.10"]

@@ -10,10 +10,11 @@ from dotenv import load_dotenv
 
 from alpaca.common.enums import SupportedCurrencies
 from alpaca.common.exceptions import APIError
-from alpaca.data.enums import DataFeed, OptionsFeed, CorporateActionsType
+from alpaca.data.enums import DataFeed, OptionsFeed, CorporateActionsType, CryptoFeed
 from alpaca.data.historical.option import OptionHistoricalDataClient
-from alpaca.data.historical.stock import StockHistoricalDataClient, StockLatestTradeRequest
+from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.data.historical.corporate_actions import CorporateActionsClient
+from alpaca.data.historical.crypto import CryptoHistoricalDataClient
 from alpaca.data.live.stock import StockDataStream
 from alpaca.data.requests import (
     OptionLatestQuoteRequest,
@@ -26,8 +27,12 @@ from alpaca.data.requests import (
     StockSnapshotRequest,
     StockTradesRequest,
     OptionChainRequest,
-    CorporateActionsRequest
+    CorporateActionsRequest,
+    CryptoBarsRequest,
+    CryptoQuoteRequest,
+    CryptoLatestQuoteRequest
 )
+
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import (
@@ -71,6 +76,7 @@ class TradingClientSigned(UserAgentMixin, TradingClient): pass
 class StockHistoricalDataClientSigned(UserAgentMixin, StockHistoricalDataClient): pass
 class OptionHistoricalDataClientSigned(UserAgentMixin, OptionHistoricalDataClient): pass
 class CorporateActionsClientSigned(UserAgentMixin, CorporateActionsClient): pass
+class CryptoHistoricalDataClientSigned(UserAgentMixin, CryptoHistoricalDataClient): pass
 
 def detect_pycharm_environment():
     """
@@ -131,17 +137,6 @@ class DefaultArgs:
 # Only parse arguments when running as main script, use defaults when imported
 args = DefaultArgs()
 
-# Initialize FastMCP server with intelligent log level detection
-is_pycharm = detect_pycharm_environment()
-log_level = "ERROR" if is_pycharm else "INFO"
-
-# Optional: Print detection result for debugging (only in non-PyCharm environments)
-# Only print when running as main script to avoid noise when imported
-if not is_pycharm and __name__ == "__main__":
-    print(f"MCP Server starting with transport={args.transport}, log_level={log_level} (PyCharm detected: {is_pycharm})")
-
-mcp = FastMCP("alpaca-trading", log_level=log_level)
-
 # Initialize Alpaca clients using environment variables
 # Import our .env file within the same directory
 load_dotenv()
@@ -153,14 +148,31 @@ TRADE_API_URL = os.getenv("TRADE_API_URL")
 TRDE_API_WSS = os.getenv("TRDE_API_WSS")
 DATA_API_URL = os.getenv("DATA_API_URL")
 STREAM_DATA_WSS = os.getenv("STREAM_DATA_WSS")
+DEBUG = os.getenv("DEBUG", "False")
+
+# Initialize FastMCP server with intelligent log level detection
+is_pycharm = detect_pycharm_environment()
+log_level = "ERROR" if is_pycharm else "INFO"
+log_level = "DEBUG" if DEBUG.lower() == "true" else log_level
+
+# Optional: Print detection result for debugging (only in non-PyCharm environments)
+# Only print when running as main script to avoid noise when imported
+if not is_pycharm and __name__ == "__main__":
+    print(f"MCP Server starting with transport={args.transport}, log_level={log_level} (PyCharm detected: {is_pycharm})")
+
+mcp = FastMCP("alpaca-trading", log_level=log_level)
+
 
 # Check if keys are available
 if not TRADE_API_KEY or not TRADE_API_SECRET:
     raise ValueError("Alpaca API credentials not found in environment variables.")
 
+# Convert string to boolean
+ALPACA_PAPER_TRADE_BOOL = ALPACA_PAPER_TRADE.lower() not in ['false', '0', 'no', 'off']
+
 # Initialize clients
 # For trading
-trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE)
+trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)
 # For historical market data
 stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
 # For streaming market data
@@ -169,6 +181,51 @@ stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_
 option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
 # For corporate actions data
 corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+# For crypto historical data
+crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+
+# ----------------------------------------------------------------------------
+# Centralized date parsing helpers
+# ----------------------------------------------------------------------------
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO-like datetime string into a datetime.
+
+    Supports:
+      - Strings ending with 'Z' by converting to '+00:00'
+      - Date-only strings 'YYYY-MM-DD' by assuming midnight
+    Returns:
+      - datetime when a non-empty valid string is provided
+      - None when value is falsy or empty
+    Raises:
+      - ValueError if a non-empty string is provided but cannot be parsed
+    """
+    if not value:
+        return None
+    s = value.strip()
+    if not s:
+        return None
+    # Allow pure dates
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', s):
+        s = s + 'T00:00:00'
+    s = s.replace('Z', '+00:00')
+    try:
+        return datetime.fromisoformat(s)
+    except Exception as e:
+        raise ValueError(f"Invalid ISO datetime: {value}") from e
+
+
+def _parse_date_ymd(value: str) -> date:
+    """Parse 'YYYY-MM-DD' into a date object.
+    Raises ValueError on invalid input."""
+    return datetime.strptime(value, '%Y-%m-%d').date()
+
+
+def _month_name_to_number(name: str) -> int:
+    """Convert month name to month number. Accepts full and abbreviated names."""
+    try:
+        return datetime.strptime(name.title(), '%B').month
+    except ValueError:
+        return datetime.strptime(name.title(), '%b').month
 
 # ============================================================================
 # Account Information Tools
@@ -276,7 +333,7 @@ async def get_open_position(symbol: str) -> str:
         return f"Error fetching position: {str(e)}"
 
 # ============================================================================
-# Market Data Tools
+# Stock Market Data Tools
 # ============================================================================
 
 @mcp.tool()
@@ -356,13 +413,13 @@ async def get_stock_bars(
         
         if start:
             try:
-                start_time = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                start_time = _parse_iso_datetime(start)
             except ValueError:
                 return f"Error: Invalid start time format '{start}'. Use ISO format like '2023-01-01T09:30:00' or '2023-01-01'"
                 
         if end:
             try:
-                end_time = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                end_time = _parse_iso_datetime(end)
             except ValueError:
                 return f"Error: Invalid end time format '{end}'. Use ISO format like '2023-01-01T16:00:00' or '2023-01-01'"
         
@@ -565,7 +622,7 @@ async def get_stock_latest_bar(
         return f"Error fetching latest bar: {str(e)}"
 
 # ============================================================================
-# Market Data Tools - Stock Snapshot Data with Helper Functions
+# Stock Market Data Tools - Stock Snapshot Data with Helper Functions
 # ============================================================================
 
 def _format_ohlcv_bar(bar, bar_type: str, include_time: bool = True) -> str:
@@ -692,17 +749,214 @@ async def get_stock_snapshot(
         return f"Error retrieving stock snapshots: {str(e)}"
 
 # ============================================================================
+# CryptoMarket Data Tools
+# ============================================================================
+
+@mcp.tool()
+async def get_crypto_bars(
+    symbol: Union[str, List[str]], 
+    days: int = 1, 
+    timeframe: str = "1Hour",
+    limit: Optional[int] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    feed: CryptoFeed = CryptoFeed.US
+) -> str:
+    """
+    Retrieves and formats historical price bars for a cryptocurrency with configurable timeframe and time range.
+    
+    Args:
+        symbol (Union[str, List[str]]): Crypto symbol(s) (e.g., 'BTC/USD', 'ETH/USD' or ['BTC/USD', 'ETH/USD'])
+        days (int): Number of days to look back (default: 1, ignored if start/end provided)
+        timeframe (str): Bar timeframe - supports flexible Alpaca formats:
+            - Minutes: "1Min", "2Min", "3Min", "4Min", "5Min", "15Min", "30Min", etc.
+            - Hours: "1Hour", "2Hour", "3Hour", "4Hour", "6Hour", etc.
+            - Days: "1Day", "2Day", "3Day", etc.
+            - Weeks: "1Week", "2Week", etc.
+            - Months: "1Month", "2Month", etc.
+            (default: "1Hour")
+        limit (Optional[int]): Maximum number of bars to return (optional)
+        start (Optional[str]): Start time in ISO format (e.g., "2023-01-01T09:30:00" or "2023-01-01")
+        end (Optional[str]): End time in ISO format (e.g., "2023-01-01T16:00:00" or "2023-01-01")
+        feed (CryptoFeed): The crypto data feed to retrieve from (default: US)
+    
+    Returns:
+        str: Formatted string containing historical crypto price data with timestamps, OHLCV data
+    """
+    try:
+        # Parse timeframe string to TimeFrame object
+        timeframe_obj = parse_timeframe_with_enums(timeframe)
+        if timeframe_obj is None:
+            return f"Error: Invalid timeframe '{timeframe}'. Supported formats: 1Min, 2Min, 4Min, 5Min, 15Min, 30Min, 1Hour, 2Hour, 4Hour, 1Day, 1Week, 1Month, etc."
+        
+        # Parse start/end times or calculate from days
+        start_time = None
+        end_time = None
+        
+        if start:
+            try:
+                start_time = _parse_iso_datetime(start)
+            except ValueError:
+                return f"Error: Invalid start time format '{start}'. Use ISO format like '2023-01-01T09:30:00' or '2023-01-01'"
+                
+        if end:
+            try:
+                end_time = _parse_iso_datetime(end)
+            except ValueError:
+                return f"Error: Invalid end time format '{end}'. Use ISO format like '2023-01-01T16:00:00' or '2023-01-01'"
+        
+        # If no start/end provided, calculate from days parameter OR limit+timeframe
+        if not start_time:
+            if limit and timeframe_obj.unit_value in [TimeFrameUnit.Minute, TimeFrameUnit.Hour]:
+                # Calculate based on limit and timeframe for intraday data
+                if timeframe_obj.unit_value == TimeFrameUnit.Minute:
+                    minutes_back = limit * timeframe_obj.amount
+                    start_time = datetime.now() - timedelta(minutes=minutes_back)
+                elif timeframe_obj.unit_value == TimeFrameUnit.Hour:
+                    hours_back = limit * timeframe_obj.amount
+                    start_time = datetime.now() - timedelta(hours=hours_back)
+            elif timeframe_obj.unit_value in [TimeFrameUnit.Minute, TimeFrameUnit.Hour]:
+                # For intraday timeframes without limit, use a reasonable default
+                if timeframe_obj.unit_value == TimeFrameUnit.Minute:
+                    # Default to last 2 hours for minute timeframes
+                    start_time = datetime.now() - timedelta(hours=2)
+                elif timeframe_obj.unit_value == TimeFrameUnit.Hour:
+                    # Default to last 24 hours for hour timeframes
+                    start_time = datetime.now() - timedelta(hours=24)
+            else:
+                # Fall back to days parameter for daily+ timeframes
+                start_time = datetime.now() - timedelta(days=days)
+        if not end_time:
+            end_time = datetime.now()
+        
+        request_params = CryptoBarsRequest(
+            symbol_or_symbols=symbol,
+            timeframe=timeframe_obj,
+            start=start_time,
+            end=end_time,
+            limit=limit
+        )
+        
+        bars = crypto_historical_data_client.get_crypto_bars(request_params, feed=feed)
+        
+        if bars[symbol]:
+            time_range = f"{start_time.strftime('%Y-%m-%d %H:%M')} to {end_time.strftime('%Y-%m-%d %H:%M')}"
+            result = f"Historical Crypto Data for {symbol} ({timeframe} bars, {time_range}):\n"
+            result += "---------------------------------------------------\n"
+            
+            for bar in bars[symbol]:
+                # Format timestamp based on timeframe unit
+                if timeframe_obj.unit_value in [TimeFrameUnit.Minute, TimeFrameUnit.Hour]:
+                    time_str = bar.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    time_str = bar.timestamp.date()
+                
+                result += f"Time: {time_str}, Open: ${bar.open:.6f}, High: ${bar.high:.6f}, Low: ${bar.low:.6f}, Close: ${bar.close:.6f}, Volume: {bar.volume}\n"
+            
+            return result
+        else:
+            return f"No historical crypto data found for {symbol} with {timeframe} timeframe in the specified time range."
+    except Exception as e:
+        return f"Error fetching historical crypto data for {symbol}: {str(e)}"
+
+@mcp.tool()
+async def get_crypto_quotes(
+    symbol: Union[str, List[str]],
+    days: int = 3,
+    limit: Optional[int] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    feed: CryptoFeed = CryptoFeed.US
+) -> str:
+    """
+    Retrieves and formats historical quote data for a cryptocurrency.
+    
+    Args:
+        symbol (Union[str, List[str]]): Crypto symbol(s) (e.g., 'BTC/USD', 'ETH/USD' or ['BTC/USD', 'ETH/USD'])
+        days (int): Number of days to look back (default: 3, ignored if start/end provided)
+        limit (Optional[int]): Maximum number of quotes to return (optional)
+        start (Optional[str]): Start time in ISO format (e.g., "2023-01-01T09:30:00" or "2023-01-01")
+        end (Optional[str]): End time in ISO format (e.g., "2023-01-01T16:00:00" or "2023-01-01")
+        feed (CryptoFeed): The crypto data feed to retrieve from (default: US)
+    
+    Returns:
+        str: Formatted string containing historical crypto quote data with timestamps, bid/ask prices and sizes
+    """
+    try:
+        # Parse start/end times or calculate from days
+        start_time = None
+        end_time = None
+        
+        if start:
+            try:
+                start_time = _parse_iso_datetime(start)
+            except ValueError:
+                return f"Error: Invalid start time format '{start}'. Use ISO format like '2023-01-01T09:30:00' or '2023-01-01'"
+                
+        if end:
+            try:
+                end_time = _parse_iso_datetime(end)
+            except ValueError:
+                return f"Error: Invalid end time format '{end}'. Use ISO format like '2023-01-01T16:00:00' or '2023-01-01'"
+        
+        # If no start/end provided, calculate from days parameter
+        if not start_time:
+            start_time = datetime.now() - timedelta(days=days)
+        if not end_time:
+            end_time = datetime.now()
+        
+        request_params = CryptoQuoteRequest(
+            symbol_or_symbols=symbol,
+            start=start_time,
+            end=end_time,
+            limit=limit
+        )
+        
+        quotes = crypto_historical_data_client.get_crypto_quotes(request_params, feed=feed)
+        
+        # Use the exact same simple pattern as crypto bars
+        if quotes[symbol]:
+            time_range = f"{start_time.strftime('%Y-%m-%d %H:%M')} to {end_time.strftime('%Y-%m-%d %H:%M')}"
+            result = f"Historical Crypto Quotes for {symbol} ({time_range}):\n"
+            result += "---------------------------------------------------\n"
+            
+            for quote in quotes[symbol]:
+                time_str = quote.timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Include milliseconds
+                result += f"Time: {time_str}, Bid: ${quote.bid_price:.6f} (Size: {quote.bid_size:.6f}), Ask: ${quote.ask_price:.6f} (Size: {quote.ask_size:.6f})\n"
+            
+            return result
+        else:
+            return f"No historical crypto quotes found for {symbol} in the specified time range."
+    except Exception as e:
+        return f"Error fetching historical crypto quotes for {symbol}: {str(e)}"
+
+# ============================================================================
 # Order Management Tools
 # ============================================================================
 
 @mcp.tool()
-async def get_orders(status: str = "all", limit: int = 10) -> str:
+async def get_orders(
+    status: str = "all", 
+    limit: int = 10,
+    after: Optional[str] = None,
+    until: Optional[str] = None,
+    direction: Optional[str] = None,
+    nested: Optional[bool] = None,
+    side: Optional[str] = None,
+    symbols: Optional[List[str]] = None
+) -> str:
     """
-    Retrieves and formats orders with the specified status.
+    Retrieves and formats orders with the specified filters.
     
     Args:
         status (str): Order status to filter by (open, closed, all)
-        limit (int): Maximum number of orders to return (default: 10)
+        limit (int): Maximum number of orders to return (default: 10, max 500)
+        after (Optional[str]): Include orders submitted after this timestamp (ISO format)
+        until (Optional[str]): Include orders submitted until this timestamp (ISO format)
+        direction (Optional[str]): Chronological order (asc or desc, default: desc)
+        nested (Optional[bool]): Roll up multi-leg orders under legs field if True
+        side (Optional[str]): Filter by order side (buy or sell)
+        symbols (Optional[List[str]]): List of symbols to filter by
     
     Returns:
         str: Formatted string containing order details including:
@@ -723,10 +977,50 @@ async def get_orders(status: str = "all", limit: int = 10) -> str:
             query_status = QueryOrderStatus.CLOSED
         else:
             query_status = QueryOrderStatus.ALL
+        
+        # Convert direction string to enum if provided
+        direction_enum = None
+        if direction:
+            if direction.lower() == "asc":
+                direction_enum = Sort.ASC
+            elif direction.lower() == "desc":
+                direction_enum = Sort.DESC
+            else:
+                return f"Invalid direction: {direction}. Must be 'asc' or 'desc'."
+        
+        # Convert side string to enum if provided
+        side_enum = None
+        if side:
+            if side.lower() == "buy":
+                side_enum = OrderSide.BUY
+            elif side.lower() == "sell":
+                side_enum = OrderSide.SELL
+            else:
+                return f"Invalid side: {side}. Must be 'buy' or 'sell'."
+        
+        # Parse datetime strings if provided
+        after_dt = None
+        until_dt = None
+        if after:
+            try:
+                after_dt = _parse_iso_datetime(after)
+            except ValueError:
+                return f"Invalid 'after' timestamp format: {after}. Use ISO format like '2023-01-01T09:30:00'"
+        if until:
+            try:
+                until_dt = _parse_iso_datetime(until)
+            except ValueError:
+                return f"Invalid 'until' timestamp format: {until}. Use ISO format like '2023-01-01T16:00:00'"
             
         request_params = GetOrdersRequest(
             status=query_status,
-            limit=limit
+            limit=limit,
+            after=after_dt,
+            until=until_dt,
+            direction=direction_enum,
+            nested=nested,
+            side=side_enum,
+            symbols=symbols
         )
         
         orders = trade_client.get_orders(request_params)
@@ -738,20 +1032,67 @@ async def get_orders(status: str = "all", limit: int = 10) -> str:
         result += "-----------------------------------\n"
         
         for order in orders:
-            result += f"""
-                        Symbol: {order.symbol}
-                        ID: {order.id}
-                        Type: {order.type}
-                        Side: {order.side}
-                        Quantity: {order.qty}
-                        Status: {order.status}
-                        Submitted At: {order.submitted_at}
-                        """
+            result += f"Symbol: {order.symbol}\n"
+            result += f"ID: {order.id}\n"
+            result += f"Type: {order.type}\n"
+            result += f"Side: {order.side}\n"
+            result += f"Quantity: {order.qty}\n"
+            result += f"Status: {order.status}\n"
+            result += f"Asset Class: {order.asset_class}\n"
+            result += f"Order Class: {order.order_class}\n"
+            result += f"Time In Force: {order.time_in_force}\n"
+            result += f"Extended Hours: {order.extended_hours}\n"
+            result += f"Submitted At: {order.submitted_at}\n"
+            result += f"Created At: {order.created_at}\n"
+            result += f"Updated At: {order.updated_at}\n"
+            
+            # Additional core fields (these are optional)
+            if hasattr(order, 'asset_id') and order.asset_id:
+                result += f"Asset ID: {order.asset_id}\n"
+            if hasattr(order, 'order_type') and order.order_type:
+                result += f"Order Type: {order.order_type}\n"
+            if hasattr(order, 'ratio_qty') and order.ratio_qty:
+                result += f"Ratio Quantity: {order.ratio_qty}\n"
+            
+            # Optional fields that may not always be present
             if hasattr(order, 'filled_at') and order.filled_at:
                 result += f"Filled At: {order.filled_at}\n"
-                
             if hasattr(order, 'filled_avg_price') and order.filled_avg_price:
                 result += f"Filled Price: ${float(order.filled_avg_price):.2f}\n"
+            if hasattr(order, 'filled_qty') and order.filled_qty:
+                result += f"Filled Quantity: {order.filled_qty}\n"
+            if hasattr(order, 'limit_price') and order.limit_price:
+                result += f"Limit Price: ${float(order.limit_price):.2f}\n"
+            if hasattr(order, 'stop_price') and order.stop_price:
+                result += f"Stop Price: ${float(order.stop_price):.2f}\n"
+            if hasattr(order, 'trail_price') and order.trail_price:
+                result += f"Trail Price: ${float(order.trail_price):.2f}\n"
+            if hasattr(order, 'trail_percent') and order.trail_percent:
+                result += f"Trail Percent: {order.trail_percent}%\n"
+            if hasattr(order, 'notional') and order.notional:
+                result += f"Notional: ${float(order.notional):.2f}\n"
+            if hasattr(order, 'position_intent') and order.position_intent:
+                result += f"Position Intent: {order.position_intent}\n"
+            if hasattr(order, 'client_order_id') and order.client_order_id:
+                result += f"Client Order ID: {order.client_order_id}\n"
+            if hasattr(order, 'canceled_at') and order.canceled_at:
+                result += f"Canceled At: {order.canceled_at}\n"
+            if hasattr(order, 'expired_at') and order.expired_at:
+                result += f"Expired At: {order.expired_at}\n"
+            if hasattr(order, 'expires_at') and order.expires_at:
+                result += f"Expires At: {order.expires_at}\n"
+            if hasattr(order, 'failed_at') and order.failed_at:
+                result += f"Failed At: {order.failed_at}\n"
+            if hasattr(order, 'replaced_at') and order.replaced_at:
+                result += f"Replaced At: {order.replaced_at}\n"
+            if hasattr(order, 'replaced_by') and order.replaced_by:
+                result += f"Replaced By: {order.replaced_by}\n"
+            if hasattr(order, 'replaces') and order.replaces:
+                result += f"Replaces: {order.replaces}\n"
+            if hasattr(order, 'legs') and order.legs:
+                result += f"Legs: {order.legs}\n"
+            if hasattr(order, 'hwm') and order.hwm:
+                result += f"HWM: {order.hwm}\n"
                 
             result += "-----------------------------------\n"
             
@@ -898,19 +1239,191 @@ async def place_stock_order(
         # Submit order
         order = trade_client.submit_order(order_data)
         return f"""
-                Order Placed Successfully:
-                -------------------------
-                Order ID: {order.id}
-                Symbol: {order.symbol}
-                Side: {order.side}
-                Quantity: {order.qty}
-                Type: {order.type}
-                Time In Force: {order.time_in_force}
-                Status: {order.status}
-                Client Order ID: {order.client_order_id}
+                Stock Order Placed Successfully:
+                --------------------------------
+                asset_class: {order.asset_class}
+                asset_id: {order.asset_id}
+                canceled_at: {order.canceled_at}
+                client_order_id: {order.client_order_id}
+                created_at: {order.created_at}
+                expired_at: {order.expired_at}
+                expires_at: {order.expires_at}
+                extended_hours: {order.extended_hours}
+                failed_at: {order.failed_at}
+                filled_at: {order.filled_at}
+                filled_avg_price: {order.filled_avg_price}
+                filled_qty: {order.filled_qty}
+                hwm: {order.hwm}
+                id: {order.id}
+                legs: {order.legs}
+                limit_price: {order.limit_price}
+                notional: {order.notional}
+                order_class: {order.order_class}
+                order_type: {order.order_type}
+                position_intent: {order.position_intent}
+                qty: {order.qty}
+                ratio_qty: {order.ratio_qty}
+                replaced_at: {order.replaced_at}
+                replaced_by: {order.replaced_by}
+                replaces: {order.replaces}
+                side: {order.side}
+                status: {order.status}
+                stop_price: {order.stop_price}
+                submitted_at: {order.submitted_at}
+                symbol: {order.symbol}
+                time_in_force: {order.time_in_force}
+                trail_percent: {order.trail_percent}
+                trail_price: {order.trail_price}
+                type: {order.type}
+                updated_at: {order.updated_at}
                 """
     except Exception as e:
         return f"Error placing order: {str(e)}"
+
+@mcp.tool()
+async def place_crypto_order(
+    symbol: str,
+    side: str,
+    order_type: str = "market",
+    time_in_force: Union[str, TimeInForce] = "gtc",
+    qty: Optional[float] = None,
+    notional: Optional[float] = None,
+    limit_price: Optional[float] = None,
+    stop_price: Optional[float] = None,
+    client_order_id: Optional[str] = None
+) -> str:
+    """
+    Place a crypto order (market, limit, stop_limit) with GTC/IOC TIF.
+
+    Rules:
+    - Market: require exactly one of qty or notional
+    - Limit: require qty and limit_price (notional not supported)
+    - Stop Limit: require qty, stop_price and limit_price (notional not supported)
+    - time_in_force: only GTC or IOC
+
+    Ref: 
+    - Crypto orders: https://docs.alpaca.markets/docs/crypto-orders
+    - Requests: [MarketOrderRequest](https://alpaca.markets/sdks/python/api_reference/trading/requests.html#marketorderrequest), [LimitOrderRequest](https://alpaca.markets/sdks/python/api_reference/trading/requests.html#limitorderrequest), [StopLimitOrderRequest](https://alpaca.markets/sdks/python/api_reference/trading/requests.html#stoplimitorderrequest)
+    - Enums: [TimeInForce](https://alpaca.markets/sdks/python/api_reference/trading/enums.html#alpaca.trading.enums.TimeInForce)
+    """
+    try:
+        # Validate side
+        if side.lower() == "buy":
+            order_side = OrderSide.BUY
+        elif side.lower() == "sell":
+            order_side = OrderSide.SELL
+        else:
+            return f"Invalid order side: {side}. Must be 'buy' or 'sell'."
+
+        # Validate and convert time_in_force to enum, allow only GTC/IOC
+        if isinstance(time_in_force, TimeInForce):
+            if time_in_force not in (TimeInForce.GTC, TimeInForce.IOC):
+                return "Invalid time_in_force for crypto. Use GTC or IOC."
+            tif_enum = time_in_force
+        elif isinstance(time_in_force, str):
+            tif_upper = time_in_force.upper()
+            if tif_upper == "GTC":
+                tif_enum = TimeInForce.GTC
+            elif tif_upper == "IOC":
+                tif_enum = TimeInForce.IOC
+            else:
+                return f"Invalid time_in_force: {time_in_force}. Valid options for crypto are: GTC, IOC"
+        else:
+            return f"Invalid time_in_force type: {type(time_in_force)}. Must be string or TimeInForce enum."
+
+        order_type_lower = order_type.lower()
+
+        if order_type_lower == "market":
+            if (qty is None and notional is None) or (qty is not None and notional is not None):
+                return "For MARKET orders, provide exactly one of qty or notional."
+            order_data = MarketOrderRequest(
+                symbol=symbol,
+                qty=qty,
+                notional=notional,
+                side=order_side,
+                type=OrderType.MARKET,
+                time_in_force=tif_enum,
+                client_order_id=client_order_id or f"crypto_{int(time.time())}"
+            )
+        elif order_type_lower == "limit":
+            if limit_price is None:
+                return "limit_price is required for LIMIT orders."
+            if qty is None:
+                return "qty is required for LIMIT orders."
+            if notional is not None:
+                return "notional is not supported for LIMIT orders. Use qty instead."
+            order_data = LimitOrderRequest(
+                symbol=symbol,
+                qty=qty,
+                side=order_side,
+                type=OrderType.LIMIT,
+                time_in_force=tif_enum,
+                limit_price=limit_price,
+                client_order_id=client_order_id or f"crypto_{int(time.time())}"
+            )
+        elif order_type_lower == "stop_limit":
+            if stop_price is None or limit_price is None:
+                return "Both stop_price and limit_price are required for STOP_LIMIT orders."
+            if qty is None:
+                return "qty is required for STOP_LIMIT orders."
+            if notional is not None:
+                return "notional is not supported for STOP_LIMIT orders. Use qty instead."
+            order_data = StopLimitOrderRequest(
+                symbol=symbol,
+                qty=qty,
+                side=order_side,
+                type=OrderType.STOP_LIMIT,
+                time_in_force=tif_enum,
+                stop_price=stop_price,
+                limit_price=limit_price,
+                client_order_id=client_order_id or f"crypto_{int(time.time())}"
+            )
+        else:
+            return "Invalid order type for crypto. Use: market, limit, stop_limit."
+
+        order = trade_client.submit_order(order_data)
+
+        return f"""
+                Crypto Order Placed Successfully:
+                -------------------------------
+                asset_class: {order.asset_class}
+                asset_id: {order.asset_id}
+                canceled_at: {order.canceled_at}
+                client_order_id: {order.client_order_id}
+                created_at: {order.created_at}
+                expired_at: {order.expired_at}
+                expires_at: {order.expires_at}
+                extended_hours: {order.extended_hours}
+                failed_at: {order.failed_at}
+                filled_at: {order.filled_at}
+                filled_avg_price: {order.filled_avg_price}
+                filled_qty: {order.filled_qty}
+                hwm: {order.hwm}
+                id: {order.id}
+                legs: {order.legs}
+                limit_price: {order.limit_price}
+                notional: {order.notional}
+                order_class: {order.order_class}
+                order_type: {order.order_type}
+                position_intent: {order.position_intent}
+                qty: {order.qty}
+                ratio_qty: {order.ratio_qty}
+                replaced_at: {order.replaced_at}
+                replaced_by: {order.replaced_by}
+                replaces: {order.replaces}
+                side: {order.side}
+                status: {order.status}
+                stop_price: {order.stop_price}
+                submitted_at: {order.submitted_at}
+                symbol: {order.symbol}
+                time_in_force: {order.time_in_force}
+                trail_percent: {order.trail_percent}
+                trail_price: {order.trail_price}
+                type: {order.type}
+                updated_at: {order.updated_at}
+                """
+    except Exception as e:
+        return f"Error placing crypto order: {str(e)}"
 
 @mcp.tool()
 async def cancel_all_orders() -> str:
@@ -976,14 +1489,16 @@ async def cancel_order_by_id(order_id: str) -> str:
     except Exception as e:
         return f"Error cancelling order {order_id}: {str(e)}"
 
-# ============================================================================
+# =======================================================================================
 # Position Management Tools
-# ============================================================================
+# Ref: https://alpaca.markets/sdks/python/api_reference/trading/positions.html#positions
+# =======================================================================================
 
 @mcp.tool()
 async def close_position(symbol: str, qty: Optional[str] = None, percentage: Optional[str] = None) -> str:
     """
-    Closes a specific position for a single symbol.
+    Closes a specific position for a single symbol. 
+    This method will throw an error if the position does not exist!
     
     Args:
         symbol (str): The symbol of the position to close
@@ -1064,6 +1579,25 @@ async def close_all_positions(cancel_orders: bool = False) -> str:
         
     except Exception as e:
         return f"Error closing positions: {str(e)}"
+
+# Position Management Tools (Options)
+@mcp.tool()
+async def exercise_options_position(symbol_or_contract_id: str) -> str:
+    """
+    Exercises a held option contract, converting it into the underlying asset.
+    
+    Args:
+        symbol_or_contract_id (str): Option contract symbol (e.g., 'NVDA250919C001680') or contract ID
+    
+    Returns:
+        str: Success message or error details
+    """
+    try:
+        trade_client.exercise_options_position(symbol_or_contract_id=symbol_or_contract_id)
+        return f"Successfully submitted exercise request for option contract: {symbol_or_contract_id}"
+    except Exception as e:
+        return f"Error exercising option contract '{symbol_or_contract_id}': {str(e)}"
+
 
 # ============================================================================
 # Asset Information Tools
@@ -1247,8 +1781,8 @@ async def get_market_calendar(start_date: str, end_date: str) -> str:
     """
     try:
         # Convert string dates to date objects
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+        start_dt = _parse_date_ymd(start_date)
+        end_dt = _parse_date_ymd(end_date)
         
         # Create the request object with the correct parameters
         calendar_request = GetCalendarRequest(start=start_dt, end=end_dt)
@@ -1387,6 +1921,103 @@ async def get_corporate_announcements(
         return f"Error fetching corporate announcements: {str(e)}"
 
 # ============================================================================
+# Options Trading Helper Functions
+# ============================================================================
+
+def _parse_expiration_expression(expression: str) -> Dict[str, Any]:
+    """
+    Parse natural language expiration expressions into date parameters.
+    
+    Args:
+        expression (str): Natural language expression like "week of September 7, 2025"
+    
+    Returns:
+        Dict[str, Any]: Parsed parameters or error message
+    """
+    import re
+    from datetime import datetime, timedelta
+    
+    expression = expression.strip().lower()
+    
+    # Pattern for "week of [date]"
+    week_pattern = r'week\s+of\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})'
+    week_match = re.search(week_pattern, expression)
+    
+    if week_match:
+        month_name, day_str, year_str = week_match.groups()
+        try:
+            # Parse the date
+            month_num = _month_name_to_number(month_name)
+            day = int(day_str)
+            year = int(year_str)
+            
+            # Create the anchor date
+            anchor_date = datetime(year, month_num, day).date()
+            
+            # Calculate the week range (Monday to Friday trading days)
+            # Find the Monday of the week containing the anchor date
+            days_since_monday = anchor_date.weekday()  # Monday=0, Sunday=6
+            week_start = anchor_date - timedelta(days=days_since_monday)  # Go to Monday
+            week_end = week_start + timedelta(days=4)  # Friday
+            
+            return {
+                'expiration_date_gte': week_start,
+                'expiration_date_lte': week_end,
+                'description': f"week of {month_name.title()} {day}, {year}"
+            }
+            
+        except (ValueError, AttributeError) as e:
+            return {'error': f"Invalid date in expression: {str(e)}"}
+    
+    # Pattern for "month of [month] [year]"
+    month_pattern = r'month\s+of\s+(\w+)\s+(\d{4})'
+    month_match = re.search(month_pattern, expression)
+    
+    if month_match:
+        month_name, year_str = month_match.groups()
+        try:
+            month_num = _month_name_to_number(month_name)
+            year = int(year_str)
+            
+            start_date = datetime(year, month_num, 1).date()
+            if month_num == 12:
+                end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+            else:
+                end_date = datetime(year, month_num + 1, 1).date() - timedelta(days=1)
+
+            return {
+                'expiration_date_gte': start_date,
+                'expiration_date_lte': end_date,
+                'description': f"month of {month_name.title()} {year}"
+            }
+            
+        except (ValueError, AttributeError) as e:
+            return {'error': f"Invalid month/year in expression: {str(e)}"}
+    
+    # Pattern for specific date like "September 7, 2025"
+    date_pattern = r'(\w+)\s+(\d{1,2}),?\s+(\d{4})'
+    date_match = re.search(date_pattern, expression)
+    
+    if date_match:
+        month_name, day_str, year_str = date_match.groups()
+        try:
+            month_num = _month_name_to_number(month_name)
+            day = int(day_str)
+            year = int(year_str)
+            
+            specific_date = datetime(year, month_num, day).date()
+            
+            return {
+                'expiration_date': specific_date,
+                'description': f"{month_name.title()} {day}, {year}"
+            }
+            
+        except (ValueError, AttributeError) as e:
+            return {'error': f"Invalid date in expression: {str(e)}"}
+    
+    return {'error': f"Unable to parse expression '{expression}'. Supported formats: 'week of September 7, 2025', 'month of December 2025', 'September 7, 2025'"}
+
+# ============================================================================
 # Options Trading Tools
 # ============================================================================
 
@@ -1394,9 +2025,9 @@ async def get_corporate_announcements(
 async def get_option_contracts(
     underlying_symbol: str,
     expiration_date: Optional[date] = None,
-    expiration_month: Optional[int] = None,
-    expiration_year: Optional[int] = None,
-    expiration_week_start: Optional[date] = None,
+    expiration_date_gte: Optional[date] = None,
+    expiration_date_lte: Optional[date] = None,
+    expiration_expression: Optional[str] = None,
     strike_price_gte: Optional[str] = None,
     strike_price_lte: Optional[str] = None,
     type: Optional[ContractType] = None,
@@ -1405,163 +2036,90 @@ async def get_option_contracts(
     limit: Optional[int] = None
 ) -> str:
     """
-    Retrieves metadata for option contracts based on specified criteria. This endpoint returns contract specifications
-    and static data, not real-time pricing information.
+    Retrieves option contracts - direct mapping to GetOptionContractsRequest.
     
     Args:
-        underlying_symbol (str): The symbol of the underlying asset (e.g., 'AAPL')
-        expiration_date (Optional[date]): Optional specific expiration date for the options
-        expiration_month (Optional[int]): Optional expiration month (1-12) to get all contracts for that month
-        expiration_year (Optional[int]): Optional expiration year (required if expiration_month is provided)
-        expiration_week_start (Optional[date]): Optional start date of week to find all contracts expiring in that week (Monday-Sunday)
-        strike_price_gte (Optional[str]): Optional minimum strike price
-        strike_price_lte (Optional[str]): Optional maximum strike price
-        type (Optional[ContractType]): Optional contract type (CALL or PUT)
-        status (Optional[AssetStatus]): Optional asset status filter (e.g., ACTIVE)
-        root_symbol (Optional[str]): Optional root symbol for the option
-        limit (Optional[int]): Optional maximum number of contracts to return
+        underlying_symbol (str): Underlying asset symbol (e.g., 'SPY', 'AAPL')
+        expiration_date (Optional[date]): Specific expiration date
+        expiration_date_gte (Optional[date]): Expiration date greater than or equal to
+        expiration_date_lte (Optional[date]): Expiration date less than or equal to
+        expiration_expression (Optional[str]): Natural language (e.g., "week of September 2, 2025")
+        strike_price_gte/lte (Optional[str]): Strike price range
+        type (Optional[ContractType]): "call" or "put"
+        status (Optional[AssetStatus]): "active" (default)
+        root_symbol (Optional[str]): Root symbol filter
+        limit (Optional[int]): Maximum number of contracts to return
     
-    Returns:
-        str: Formatted string containing option contract metadata including:
-            - Contract ID and Symbol
-            - Name and Type (Call/Put)
-            - Strike Price and Expiration Date
-            - Exercise Style (American/European)
-            - Contract Size and Status
-            - Open Interest and Close Price
-            - Underlying Asset Information ('underlying_asset_id', 'underlying_symbol', 'underlying_name', 'underlying_exchange')
-            - Trading Status (Tradable/Non-tradable)
-    
-    Note:
-        This endpoint returns contract specifications and static data. For real-time pricing
-        information (bid/ask prices, sizes, etc.), use get_option_latest_quote instead.
-        
-        For month-based queries, use expiration_month and expiration_year instead of expiration_date.
-        For week-based queries, use expiration_week_start to find all contracts expiring in that week.
-        The function will check all dates from Monday through Sunday of that week.
-        
-        When more than 500 contracts are found, a guidance message is displayed instead of 
-        overwhelming output to help users narrow their search criteria.
+    Examples:
+        get_option_contracts("NVDA", expiration_expression="week of September 2, 2025")
+        get_option_contracts("SPY", expiration_date_gte=date(2025,9,1), expiration_date_lte=date(2025,9,5))
     """
     try:
-        # Determine the appropriate expiration filtering strategy
-        use_specific_date = expiration_date is not None
-        use_month_filter = expiration_month is not None and expiration_year is not None
-        use_week_filter = expiration_week_start is not None
+        # Handle natural language expression
+        if expiration_expression:
+            parsed = _parse_expiration_expression(expiration_expression)
+            if parsed.get('error'):
+                return f"Error: {parsed['error']}"
+            
+            # Map parsed results directly to API parameters
+            if 'expiration_date' in parsed:
+                expiration_date = parsed['expiration_date']
+            elif 'expiration_date_gte' in parsed:
+                expiration_date_gte = parsed['expiration_date_gte']
+                expiration_date_lte = parsed['expiration_date_lte']
         
-        # Create the request object - if filtering by month or week, don't use expiration_date
-        request_expiration_date = expiration_date if use_specific_date and not use_month_filter and not use_week_filter else None
-        
-        # Create the request object with all available parameters
-        # Set a higher limit to get more contracts (default is 100, we use 1000 for comprehensive results)
+        # Create API request - direct mapping like your baseline example
         request = GetOptionContractsRequest(
             underlying_symbols=[underlying_symbol],
-            expiration_date=request_expiration_date,
+            expiration_date=expiration_date,
+            expiration_date_gte=expiration_date_gte,
+            expiration_date_lte=expiration_date_lte,
             strike_price_gte=strike_price_gte,
             strike_price_lte=strike_price_lte,
             type=type,
             status=status,
             root_symbol=root_symbol,
-            limit=limit if limit else 1000  # Default to 1000 to get more comprehensive results
+            limit=limit
         )
         
-        # Get the option contracts
+        # Execute API call
         response = trade_client.get_option_contracts(request)
         
         if not response or not response.option_contracts:
-            return f"No option contracts found for {underlying_symbol} matching the criteria."
+            return f"No option contracts found for {underlying_symbol}."
         
-        # Filter by month or week if specified
-        contracts_to_display = response.option_contracts
-        if use_month_filter:
-            contracts_to_display = [
-                contract for contract in response.option_contracts 
-                if contract.expiration_date.month == expiration_month and contract.expiration_date.year == expiration_year
-            ]
-            
-            if not contracts_to_display:
-                month_name = date(expiration_year, expiration_month, 1).strftime("%B")
-                return f"No option contracts found for {underlying_symbol} expiring in {month_name} {expiration_year}."
-        
-        elif use_week_filter:
-            # Calculate the week range (Monday to Sunday)
-            from datetime import timedelta
-            
-            # Find the Monday of the week containing expiration_week_start
-            days_since_monday = expiration_week_start.weekday()
-            week_start = expiration_week_start - timedelta(days=days_since_monday)
-            week_end = week_start + timedelta(days=6)  # Sunday
-            
-            contracts_to_display = [
-                contract for contract in response.option_contracts 
-                if week_start <= contract.expiration_date <= week_end
-            ]
-            
-            if not contracts_to_display:
-                return f"No option contracts found for {underlying_symbol} expiring during the week of {week_start.strftime('%B %d, %Y')}."
-        
-        # Format the response
-        if use_month_filter:
-            month_name = date(expiration_year, expiration_month, 1).strftime("%B")
-            result = f"Option Contracts for {underlying_symbol} expiring in {month_name} {expiration_year}:\n"
-        elif use_week_filter:
-            from datetime import timedelta
-            days_since_monday = expiration_week_start.weekday()
-            week_start = expiration_week_start - timedelta(days=days_since_monday)
-            week_end = week_start + timedelta(days=6)
-            result = f"Option Contracts for {underlying_symbol} expiring during the week of {week_start.strftime('%B %d')} - {week_end.strftime('%B %d, %Y')}:\n"
-        else:
-            result = f"Option Contracts for {underlying_symbol}:\n"
-        result += "----------------------------------------\n"
-        
-        # Check if there are too many results and provide guidance instead of overwhelming output
-        total_contracts = len(contracts_to_display)
-        max_display_contracts = 500  # Threshold to limit display and show guidance message instead
-        
-        # Sort contracts by expiration date and strike price
-        contracts_to_display.sort(key=lambda x: (x.expiration_date, float(x.strike_price)))
-        
-        if total_contracts > max_display_contracts:
-            # Too many results - provide simple guidance
-            result += f"Found {total_contracts} contracts. For easier viewing, please specify a particular expiration date or strike price range."
-            
-        else:
-            # Normal display for manageable number of results
-            for contract in contracts_to_display:
-                result += f"""
-                Symbol: {contract.symbol}
-                Name: {contract.name}
-                Type: {contract.type}
-                Strike Price: ${float(contract.strike_price):.2f}
-                Expiration Date: {contract.expiration_date}
-                Status: {contract.status}
-                Root Symbol: {contract.root_symbol}
-                Underlying Symbol: {contract.underlying_symbol}
-                Exercise Style: {contract.style}
-                Contract Size: {contract.size}
-                Tradable: {'Yes' if contract.tradable else 'No'}
-                Open Interest: {contract.open_interest}
-                Close Price: ${float(contract.close_price) if contract.close_price else 'N/A'}
-                Close Price Date: {contract.close_price_date}
-                -------------------------
-                """
-        
-        # Add summary information
-        if use_month_filter:
-            month_name = date(expiration_year, expiration_month, 1).strftime("%B")
-            result += f"\nTotal contracts found for {underlying_symbol} in {month_name} {expiration_year}: {total_contracts}"
-        elif use_week_filter:
-            from datetime import timedelta
-            days_since_monday = expiration_week_start.weekday()
-            week_start = expiration_week_start - timedelta(days=days_since_monday)
-            result += f"\nTotal contracts found for {underlying_symbol} during the week of {week_start.strftime('%B %d, %Y')}: {total_contracts}"
-        else:
-            result += f"\nTotal contracts found for {underlying_symbol}: {total_contracts}"
-        
-        return result
+        # Format results
+        contracts = response.option_contracts
+        result = [f"Option Contracts for {underlying_symbol}:", "=" * 50]
+
+        for contract in contracts:  # Show ALL contracts returned by API
+            contract_type = "Call" if contract.type == ContractType.CALL else "Put"
+            result.extend([
+                f"ID: {contract.id}",
+                f"Symbol: {contract.symbol}",
+                f"  Name: {contract.name}",
+                f"  Type: {contract_type}",
+                f"  Strike: ${contract.strike_price}",
+                f"  Expiration: {contract.expiration_date}",
+                f"  Style: {contract.style}",
+                f"  Contract Size: {contract.size}",
+                f"  Open Interest: {contract.open_interest or 'N/A'}",
+                f"  Open Interest Date: {contract.open_interest_date or 'N/A'}",
+                f"  Close Price: ${contract.close_price or 'N/A'}",
+                f"  Close Price Date: {contract.close_price_date or 'N/A'}",
+                f"  Tradable: {contract.tradable}",
+                f"  Status: {contract.status}",
+                f"  Root Symbol: {contract.root_symbol}",
+                f"  Underlying Asset ID: {contract.underlying_asset_id}",
+                f"  Underlying Symbol: {contract.underlying_symbol}",
+                "-" * 40
+            ])
+
+        result.append(f"\nTotal: {len(contracts)} contracts")
+        return "\n".join(result)
         
     except Exception as e:
-        return f"Error fetching option contracts: {str(e)}"
+        return f"Error: {str(e)}"
 
 @mcp.tool()
 async def get_option_latest_quote(
@@ -1739,7 +2297,7 @@ async def get_option_snapshot(symbol_or_symbols: Union[str, List[str]], feed: Op
 # Options Trading Helper Functions
 # ============================================================================
 
-def _validate_option_order_inputs(legs: List[Dict[str, Any]], quantity: int, time_in_force: TimeInForce) -> Optional[str]:
+def _validate_option_order_inputs(legs: List[Dict[str, Any]], quantity: int, time_in_force: Union[str, TimeInForce]) -> Optional[str]:
     """Validate inputs for option order placement."""
     if not legs:
         return "Error: No option legs provided"
@@ -1747,12 +2305,25 @@ def _validate_option_order_inputs(legs: List[Dict[str, Any]], quantity: int, tim
         return "Error: Maximum of 4 legs allowed for option orders"
     if quantity <= 0:
         return "Error: Quantity must be positive"
-    if time_in_force != TimeInForce.DAY:
-        return "Error: Only DAY time_in_force is supported for options trading"
+    
+    # Handle both string and enum inputs
+    if isinstance(time_in_force, str):
+        if time_in_force.lower() != "day":
+            return "Error: Only 'day' time_in_force is supported for options trading"
+    elif isinstance(time_in_force, TimeInForce):
+        if time_in_force != TimeInForce.DAY:
+            return "Error: Only DAY time_in_force is supported for options trading"
+    else:
+        return f"Error: Invalid time_in_force type: {type(time_in_force)}. Must be string or TimeInForce enum."
+    
     return None
 
 def _convert_order_class_string(order_class: Optional[Union[str, OrderClass]]) -> Union[OrderClass, str]:
     """Convert order class string to enum if needed."""
+    if order_class is None:
+        return order_class
+    if isinstance(order_class, OrderClass):
+        return order_class
     if isinstance(order_class, str):
         order_class_upper = order_class.upper()
         class_mapping = {
@@ -1766,7 +2337,8 @@ def _convert_order_class_string(order_class: Optional[Union[str, OrderClass]]) -
             return class_mapping[order_class_upper]
         else:
             return f"Invalid order class: {order_class}. Must be one of: simple, bracket, oco, oto, mleg"
-    return order_class
+    else:
+        return f"Invalid order class type: {type(order_class)}. Must be string or OrderClass enum."
 
 def _process_option_legs(legs: List[Dict[str, Any]]) -> Union[List[OptionLegRequest], str]:
     """Convert leg dictionaries to OptionLegRequest objects."""
@@ -2026,7 +2598,7 @@ async def place_option_market_order(
     legs: List[Dict[str, Any]],
     order_class: Optional[Union[str, OrderClass]] = None,
     quantity: int = 1,
-    time_in_force: TimeInForce = TimeInForce.DAY,
+    time_in_force: Union[str, TimeInForce] = "day",
     extended_hours: bool = False
 ) -> str:
     """
@@ -2049,8 +2621,8 @@ async def place_option_market_order(
         order_class (Optional[Union[str, OrderClass]]): Order class ('simple', 'bracket', 'oco', 'oto', 'mleg' or OrderClass enum)
             Defaults to 'simple' for single leg, 'mleg' for multi-leg
         quantity (int): Base quantity for the order (default: 1)
-        time_in_force (TimeInForce): Time in force for the order. For options trading, 
-            only DAY is supported (default: TimeInForce.DAY)
+        time_in_force (Union[str, TimeInForce]): Time in force for the order. For options trading, 
+            only 'day' is supported (default: 'day')
         extended_hours (bool): Whether to allow execution during extended hours (default: False)
     
     Returns:
@@ -2083,6 +2655,14 @@ async def place_option_market_order(
         if validation_error:
             return validation_error
         
+        # Convert time_in_force to enum (handle both string and enum inputs)
+        if isinstance(time_in_force, str):
+            time_in_force_enum = TimeInForce.DAY  # Only DAY is supported for options
+        elif isinstance(time_in_force, TimeInForce):
+            time_in_force_enum = time_in_force
+        else:
+            return f"Error: Invalid time_in_force type: {type(time_in_force)}. Must be string or TimeInForce enum."
+        
         # Convert order class string to enum if needed
         converted_order_class = _convert_order_class_string(order_class)
         if isinstance(converted_order_class, OrderClass):
@@ -2102,7 +2682,7 @@ async def place_option_market_order(
         
         # Create order request
         order_data = _create_option_market_order_request(
-            order_legs, order_class, quantity, time_in_force, extended_hours
+            order_legs, order_class, quantity, time_in_force_enum, extended_hours
         )
         
         # Submit order
@@ -2125,13 +2705,21 @@ async def place_option_market_order(
         4. Contacting support if the issue persists
         """
 
+
+# ============================================================================
+# Helper Functions and Utilities
+# ============================================================================
+# The following functions are internal helper functions used by the MCP tools
+# for data parsing, validation, formatting, and other utility operations.
+# ============================================================================
+
 def parse_timeframe_with_enums(timeframe_str: str) -> Optional[TimeFrame]:
     """
     Parse timeframe string to Alpaca TimeFrame object using proper enumerations.
-    Supports flexible parsing of any valid timeframe format.
+    Supports standard Alpaca formats and common natural language variations.
     
     Args:
-        timeframe_str (str): Timeframe string (e.g., "1Min", "4Min", "2Hour", "1Day")
+        timeframe_str (str): Timeframe string (e.g., "1Min", "30 mins", "1 hour", "daily")
         
     Returns:
         Optional[TimeFrame]: Parsed TimeFrame object using TimeFrameUnit enums or None if invalid
@@ -2141,9 +2729,14 @@ def parse_timeframe_with_enums(timeframe_str: str) -> Optional[TimeFrame]:
     """
     
     try:
+        if not timeframe_str or not isinstance(timeframe_str, str):
+            return None
+            
         timeframe_str = timeframe_str.strip()
+        if not timeframe_str:
+            return None
         
-        # Use predefined TimeFrame objects for common cases (more efficient)
+        # Use predefined TimeFrame objects for common cases (most efficient)
         predefined_timeframes = {
             "1Min": TimeFrame.Minute,
             "1Hour": TimeFrame.Hour, 
@@ -2155,54 +2748,132 @@ def parse_timeframe_with_enums(timeframe_str: str) -> Optional[TimeFrame]:
         if timeframe_str in predefined_timeframes:
             return predefined_timeframes[timeframe_str]
         
-        # Flexible regex pattern to parse any valid timeframe format
-        # Matches: <number><unit> where unit can be Min, Hour, Day, Week, Month
-        pattern = r'^(\d+)(Min|Hour|Day|Week|Month)$'
-        match = re.match(pattern, timeframe_str, re.IGNORECASE)
+        # Normalize input for flexible parsing
+        normalized = re.sub(r'\s+', ' ', timeframe_str.lower().strip())
         
-        if not match:
-            return None
-            
-        amount = int(match.group(1))
-        unit_str = match.group(2).lower()
-        
-        # Map unit strings to TimeFrameUnit enums
-        unit_mapping = {
-            'min': TimeFrameUnit.Minute,
-            'hour': TimeFrameUnit.Hour,
-            'day': TimeFrameUnit.Day,
-            'week': TimeFrameUnit.Week,
-            'month': TimeFrameUnit.Month
+        # Common expressions that map directly to timeframes
+        direct_mappings = {
+            'half hour': (30, TimeFrameUnit.Minute),
+            'quarter hour': (15, TimeFrameUnit.Minute),
+            'hourly': (1, TimeFrameUnit.Hour),
+            'daily': (1, TimeFrameUnit.Day),
+            'weekly': (1, TimeFrameUnit.Week),
+            'monthly': (1, TimeFrameUnit.Month)
         }
         
-        unit = unit_mapping.get(unit_str)
-        if unit is None:
-            return None
+        if normalized in direct_mappings:
+            amount, unit = direct_mappings[normalized]
+            return TimeFrame(amount, unit)
+        
+        # Comprehensive pattern to handle most variations
+        # Matches: number + unit (with optional spaces, hyphens, plurals)
+        pattern = r'^(\d+)\s*[-\s]*\s*(min|minute|minutes|hr|hour|hours|day|days|week|weeks|month|months)s?$'
+        match = re.match(pattern, normalized)
+        
+        if match:
+            amount = int(match.group(1))
+            unit_str = match.group(2)
             
-        # Validate amount based on unit type
-        if unit == TimeFrameUnit.Minute and amount > 59:
-            # Minutes should be reasonable (1-59)
-            return None
-        elif unit == TimeFrameUnit.Hour and amount > 23:
-            # Hours should be reasonable (1-23) 
-            return None
-        elif unit in [TimeFrameUnit.Day, TimeFrameUnit.Week, TimeFrameUnit.Month] and amount > 365:
-            # Days/weeks/months should be reasonable
-            return None
+            # Map unit strings to TimeFrameUnit enums
+            unit_mapping = {
+                'min': TimeFrameUnit.Minute, 'minute': TimeFrameUnit.Minute, 'minutes': TimeFrameUnit.Minute,
+                'hr': TimeFrameUnit.Hour, 'hour': TimeFrameUnit.Hour, 'hours': TimeFrameUnit.Hour,
+                'day': TimeFrameUnit.Day, 'days': TimeFrameUnit.Day,
+                'week': TimeFrameUnit.Week, 'weeks': TimeFrameUnit.Week,
+                'month': TimeFrameUnit.Month, 'months': TimeFrameUnit.Month
+            }
             
-        return TimeFrame(amount, unit)
+            unit = unit_mapping.get(unit_str)
+            if unit and _validate_amount(amount, unit):
+                return TimeFrame(amount, unit)
+        
+        # Try case-insensitive standard Alpaca formats
+        alpaca_pattern = r'^(\d+)(min|hour|day|week|month)s?$'
+        match = re.match(alpaca_pattern, normalized)
+        
+        if match:
+            amount = int(match.group(1))
+            unit_str = match.group(2)
+            
+            unit_mapping = {
+                'min': TimeFrameUnit.Minute,
+                'hour': TimeFrameUnit.Hour,
+                'day': TimeFrameUnit.Day,
+                'week': TimeFrameUnit.Week,
+                'month': TimeFrameUnit.Month
+            }
+            
+            unit = unit_mapping.get(unit_str)
+            if unit and _validate_amount(amount, unit):
+                return TimeFrame(amount, unit)
+            
+        return None
         
     except (ValueError, AttributeError, TypeError):
         return None
 
-# Run the server
-if __name__ == "__main__":
-    # Parse command line arguments when running as main script
+
+def _validate_amount(amount: int, unit: TimeFrameUnit) -> bool:
+    """
+    Validate that the amount is reasonable for the given unit.
+    """
+    if amount <= 0:
+        return False
+        
+    if unit == TimeFrameUnit.Minute and amount > 59:
+        return False
+    elif unit == TimeFrameUnit.Hour and amount > 23:
+        return False
+    elif unit in [TimeFrameUnit.Day, TimeFrameUnit.Week, TimeFrameUnit.Month] and amount > 365:
+        return False
+        
+    return True
+
+
+# ============================================================================
+# CLI Commands for uvx Integration
+# ============================================================================
+
+import os
+from pathlib import Path
+
+def _prompt_bool(prompt: str, default: bool = True) -> bool:
+    val = input(f"{prompt} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
+    if not val:
+        return default
+    return val in {"y", "yes", "true", "1"}
+
+def cmd_init():
+    print("This will create or update a .env file in the project directory.")
+    api_key = input("ALPACA_API_KEY: ").strip()
+    secret_key = input("ALPACA_SECRET_KEY: ").strip()
+    paper = _prompt_bool("Use paper trading")
+    trade_api_url = input("TRADE_API_URL (enter to skip): ").strip()
+    trade_api_wss = input("TRADE_API_WSS (enter to skip): ").strip()
+    data_api_url = input("DATA_API_URL (enter to skip): ").strip()
+    stream_data_wss = input("STREAM_DATA_WSS (enter to skip): ").strip()
+
+    env_path = Path(".env")
+    lines = [
+        '# Generated by "alpaca-mcp init"',
+        f'ALPACA_API_KEY="{api_key}"',
+        f'ALPACA_SECRET_KEY="{secret_key}"',
+        f"ALPACA_PAPER_TRADE={str(paper)}",
+        f"TRADE_API_URL={trade_api_url or 'None'}",
+        f"TRADE_API_WSS={trade_api_wss or 'None'}",
+        f"DATA_API_URL={data_api_url or 'None'}",
+        f"STREAM_DATA_WSS={stream_data_wss or 'None'}",
+        "",
+    ]
+    env_path.write_text("\n".join(lines))
+    print(f"Wrote {env_path.resolve()}")
+
+def cmd_serve():
+    print("Starting Alpaca MCP server...")
+    # Use the existing server bootstrap logic
     args = parse_arguments()
-    
-    # Setup transport configuration based on command line arguments
     transport_config = setup_transport_config(args)
-    
+
     try:
         # Run server with the specified transport
         if args.transport == "http":
@@ -2227,3 +2898,89 @@ if __name__ == "__main__":
         else:
             print(f"Error starting MCP server: {e}")
         sys.exit(1)
+
+def main():
+    import argparse
+    p = argparse.ArgumentParser(prog="alpaca-mcp")
+    sub = p.add_subparsers(dest="cmd")
+
+    sub.add_parser("init", help="Create or update .env with your Alpaca credentials")
+
+    # Add serve subcommand with transport options
+    serve_parser = sub.add_parser("serve", help="Start the MCP server using environment variables")
+    serve_parser.add_argument(
+        "--transport",
+        choices=["stdio", "http", "sse"],
+        default="stdio",
+        help="Transport method to use (default: stdio)"
+    )
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind the server to for HTTP/SSE transport (default: 127.0.0.1)"
+    )
+    serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind the server to for HTTP/SSE transport (default: 8000)"
+    )
+
+    args = p.parse_args()
+    if args.cmd == "init":
+        cmd_init()
+    elif args.cmd == "serve":
+        # Override sys.argv to pass transport args to the existing logic
+        import sys
+        original_argv = sys.argv[:]
+        sys.argv = ["alpaca-mcp", "--transport", args.transport]
+        if hasattr(args, 'host'):
+            sys.argv.extend(["--host", args.host])
+        if hasattr(args, 'port'):
+            sys.argv.extend(["--port", str(args.port)])
+
+        try:
+            cmd_serve()
+        finally:
+            sys.argv = original_argv
+    else:
+        p.print_help()
+
+# Run the server
+if __name__ == "__main__":
+    # Check if we should use the new CLI (if any CLI commands are passed)
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ["init", "serve"]:
+        main()
+    else:
+        # Use the existing server startup logic for backwards compatibility
+        # Parse command line arguments when running as main script
+        args = parse_arguments()
+
+        # Setup transport configuration based on command line arguments
+        transport_config = setup_transport_config(args)
+
+        try:
+            # Run server with the specified transport
+            if args.transport == "http":
+                mcp.settings.host = transport_config["host"]
+                mcp.settings.port = transport_config["port"]
+                mcp.run(transport="streamable-http")
+            elif args.transport == "sse":
+                mcp.settings.host = transport_config["host"]
+                mcp.settings.port = transport_config["port"]
+                mcp.run(transport="sse")
+            else:
+                mcp.run(transport="stdio")
+        except Exception as e:
+            if args.transport in ["http", "sse"]:
+                print(f"Error starting {args.transport} server: {e}")
+                print(f"Server was configured to run on {transport_config['host']}:{transport_config['port']}")
+                print("Common solutions:")
+                print(f"1. Ensure port {transport_config['port']} is available")
+                print(f"2. Check if another service is using port {transport_config['port']}")
+                print("3. Try using a different port with --port <PORT>")
+                print("4. For remote access, consider using SSH tunneling or reverse proxy")
+            else:
+                print(f"Error starting MCP server: {e}")
+            sys.exit(1)

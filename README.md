@@ -6,8 +6,9 @@ This is a Model Context Protocol (MCP) server implementation for Alpaca's Tradin
 
 - **Market Data**
   - Real-time quotes, trades, and price bars for stocks
-  - Historical price data and trading history
-  - Option contract quotes and Greeks (via snapshots)
+  - Historical data with flexible timeframes (1Min to 1Month)
+  - Comprehensive stock snapshots and trade-level history
+  - Option contract quotes and Greeks
 - **Account Management**
   - View balances, buying power, and account status
   - Inspect all open and closed positions
@@ -15,13 +16,18 @@ This is a Model Context Protocol (MCP) server implementation for Alpaca's Tradin
   - Get detailed info on individual holdings
   - Liquidate all or partial positions by share count or percentage
 - **Order Management**
-  - Place stock and option orders (market or limit)
+  - Place stock, crypto, and option orders
+  - Support for market, limit, stop, stop-limit, and trailing-stop orders
   - Cancel orders individually or in bulk
   - Retrieve full order history
 - **Options Trading**
-  - Search and view option contracts by expiration or strike price
-  - Place multi-leg options strategies
-  - Get latest quotes and Greeks for contracts
+  - Search option contracts by expiration, strike price, and type
+  - Place single-leg or multi-leg options strategies (spreads, straddles, etc.)
+  - Get latest quotes, Greeks, and implied volatility
+- **Crypto Trading**
+  - Place market, limit, and stop-limit crypto orders
+  - Support for GTC and IOC time in force
+  - Handle quantity or notional-based orders
 - **Market Status & Corporate Actions**
   - Check if markets are open
   - Fetch market calendar and trading sessions
@@ -30,16 +36,40 @@ This is a Model Context Protocol (MCP) server implementation for Alpaca's Tradin
   - Create, update, and view personal watchlists
   - Manage multiple watchlists for tracking assets
 - **Asset Search**
-  - Query details for stocks and other Alpaca-supported assets
+  - Query details for stocks, crypto, and other Alpaca-supported assets
+  - Filter assets by status, class, exchange, and attributes
 
-## 0. Prerequisites
+## Quick Start with uvx
 
-- Python
-- GitHub account
+The fastest way to get started is using uvx, which automatically handles Python environment isolation:
+
+```bash
+# One time install of uv if needed
+# macOS or Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows PowerShell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Zero install run path that fetches and executes the CLI in an isolated environment
+uvx alpaca-mcp
+
+# Initialize credentials once to create .env
+alpaca-mcp init
+
+# Start the server
+alpaca-mcp serve
+```
+
+## Getting Started (Alternative Setup)
+### 0. Prerequisites
+
+- Python 3.11+ (automatically handled by uvx)
 - Alpaca API keys (with paper or live trading access)
 - Claude for Desktop or another compatible MCP client
 
-## 1. Installation
+### 1. Manual Installation (for contributors)
+
+If you prefer to work with the source code directly:
 
 1. Clone the repository and navigate to the directory:
    ```bash
@@ -49,19 +79,29 @@ This is a Model Context Protocol (MCP) server implementation for Alpaca's Tradin
 
 2. Create and activate a virtual environment:
 
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-    **Note:** The virtual environment will use the Python version that was used to create it. If you run the command with Python 3.10 or newer, your virtual environment will also use Python 3.10+. If you want to confirm the version, you can run `python3 --version` after activating the virtual environment. 
+    **Prerequisites:** This project requires Python 3.11 or newer (MCP package requirement). If you don't have Python 3.11+, install it first:
+    - **macOS**: `brew install python@3.11`
+    - **Ubuntu/Debian**: `sudo apt install python3.11 python3.11-venv`
+    - **Windows**: Download from [python.org](https://www.python.org/downloads/)
 
-3. Install the required packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
+    **Using uv (recommended):**
+
+    ```bash
+    uv venv .venv --python 3.11
+    source .venv/bin/activate # On Windows: .venv\Scripts\activate
+    uv pip install -e .
+    ```
+
+    **Using pip (traditional):**
+
+    ```bash
+    python3.11 -m venv .venv  # Use python3.11 specifically
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    pip install -e .
+    ``` 
 
 
-## Project Structure
+### Project Structure
 
 After cloning and activating the virtual environment, your directory structure should look like this:
 ```
@@ -82,14 +122,26 @@ alpaca-mcp-server/          ← This is the workspace folder (= project root)
 └── README.md
 ```
 
-## 2. Create and edit a .env file for your credentials in the project directory
+### 2. Configure Credentials and Start Server
 
-1. Copy the example environment file in the project root by running this command:
+For the uvx workflow, use the interactive setup:
+
+```bash
+# Initialize credentials (creates .env file)
+alpaca-mcp init
+
+# Start the server
+alpaca-mcp serve
+```
+
+For manual installation, create the .env file:
+
+1. Copy the example environment file in the project root:
    ```bash
    cp .env.example .env
    ```
 
-2. Replace the credentials (e.g. API keys) in the `.env` file:
+2. Replace the credentials in the `.env` file:
 
    ```
    ALPACA_API_KEY = "your_alpaca_api_key_for_paper_account"
@@ -101,18 +153,18 @@ alpaca-mcp-server/          ← This is the workspace folder (= project root)
    STREAM_DATA_WSS = None
    ```
 
-## 3. Start the MCP Server
+### 3. Start the MCP Server
 
-Open a terminal in the project root directory and run the following command:
-
-**For local usage (default - stdio transport):**
+**With uvx:**
 ```bash
-python alpaca_mcp_server.py
+alpaca-mcp serve                    # Default stdio transport
+alpaca-mcp serve --transport http   # HTTP transport for remote connections
 ```
 
-**For remote usage (HTTP transport):**
+**With manual installation:**
 ```bash
-python alpaca_mcp_server.py --transport http
+python alpaca_mcp_server.py                    # Default stdio transport
+python alpaca_mcp_server.py --transport http   # HTTP transport
 ```
 
 **Available transport options:**
@@ -124,11 +176,56 @@ python alpaca_mcp_server.py --transport http
 
 **Note:** For more information about MCP transport methods, see the [official MCP transport documentation](https://modelcontextprotocol.io/docs/concepts/transports).
 
-## Claude Desktop Usage
+### 4. API Key Configuration for Live Trading
+
+This MCP server connects to Alpaca's **paper trading API** by default for safe testing.
+To enable **live trading with real funds**, update the following configuration files:
+
+### Set Your API Credentials in Two Places:
+
+1. **Update environment file in the project directory**
+
+    Provide your live account keys as environment variables in the `.env` file:
+    ```
+    ALPACA_API_KEY = "your_alpaca_api_key_for_live_account"
+    ALPACA_SECRET_KEY = "your_alpaca_secret_key_for_live_account"
+    ALPACA_PAPER_TRADE = False
+    TRADE_API_URL = None
+    TRADE_API_WSS = None
+    DATA_API_URL = None
+    STREAM_DATA_WSS = None
+    ```
+
+2. **Update Configuration file**
+
+   For example, when using Claude Desktop, provide your live account keys as environment variables in `claude_desktop_config.json`:
+
+   ```json
+   {
+     "mcpServers": {
+       "alpaca": {
+         "command": "<project_root>/venv/bin/python",
+         "args": [
+           "/path/to/alpaca_mcp_server.py"
+         ],
+         "env": {
+           "ALPACA_API_KEY": "your_alpaca_api_key_for_live_account",
+           "ALPACA_SECRET_KEY": "your_alpaca_secret_key_for_live_account"
+         }
+       }
+     }
+   }
+   ```
+
+## MCP Client Configuration
+
+Below you'll find step-by-step guides for connecting the Alpaca MCP server to various MCP clients. Choose the section that matches your preferred development environment or AI assistant.
+
+### Claude Desktop Usage
 
 To use Alpaca MCP Server with Claude Desktop, please follow the steps below. The official Claude Desktop setup document is available here: https://modelcontextprotocol.io/quickstart/user
 
-### Configure Claude Desktop
+#### Configure Claude Desktop
 
 1. Open Claude Desktop
 2. Navigate to: `Settings → Developer → Edit Config`
@@ -171,7 +268,7 @@ To use Alpaca MCP Server with Claude Desktop, please follow the steps below. The
 }
 ```
 
-## Claude Code Usage
+### Claude Code Usage
 
 To use Alpaca MCP Server with Claude Code, please follow the steps below.
 
@@ -191,7 +288,7 @@ The Claude MCP CLI tool needs to be installed separately. Check following the of
 * [Learn how to set up MCP with Claude Code](https://docs.anthropic.com/en/docs/claude-code/mcp)
 * [Install, authenticate, and start using Claude Code on your development machine](https://docs.anthropic.com/en/docs/claude-code/setup)
 
-## Cursor Usage
+### Cursor Usage
 
 To use Alpaca MCP Server with Cursor, please follow the steps below. The official Cursor MCP setup document is available here: https://docs.cursor.com/context/mcp
 
@@ -199,7 +296,7 @@ To use Alpaca MCP Server with Cursor, please follow the steps below. The officia
 - Cursor IDE installed with Claude AI enabled
 - Python and virtual environment set up (follow Installation steps above)
 
-### Configure the MCP Server
+#### Configure the MCP Server
 
 **Method 1: Using JSON Configuration**
 
@@ -230,7 +327,7 @@ Create or edit `~/.cursor/mcp.json` (macOS/Linux) or `%USERPROFILE%\.cursor\mcp.
 
 **Note:** Replace the paths with your actual project directory paths and API credentials.
 
-## VS Code Usage
+### VS Code Usage
 
 To use Alpaca MCP Server with VS Code, please follow the steps below.
 
@@ -242,13 +339,13 @@ The official VS Code setup document is available here: https://code.visualstudio
 - Python and virtual environment set up (follow Installation steps above)
 - MCP support enabled in VS Code (see below)
 
-### 1. Enable MCP Support in VS Code
+#### 1. Enable MCP Support in VS Code
 
 1. Open VS Code Settings (Ctrl/Cmd + ,)
 2. Search for "chat.mcp.enabled" to check the box to enable MCP support
 3. Search for "github.copilot.chat.experimental.mcp" to check the box to use instruction files
 
-### 2. Configure the MCP Server
+#### 2. Configure the MCP Server
 
 **Recommendation:** Use **workspace-specific** configuration (`.vscode/mcp.json`) instead of user-wide configuration. This allows different projects to use different API keys (multiple paper accounts or live trading) and keeps trading tools isolated from other development work.
 
@@ -321,7 +418,7 @@ Specify the server in the `mcp` VS Code user settings (`settings.json`) to enabl
 }
 ```
 
-## PyCharm Usage
+### PyCharm Usage
 
 To use the Alpaca MCP Server with PyCharm, please follow the steps below. The official setup guide for configuring the MCP Server in PyCharm is available here: https://www.jetbrains.com/help/ai-assistant/configure-an-mcp-server.html
 
@@ -346,14 +443,14 @@ PyCharm supports MCP servers through its integrated MCP client functionality. Th
    MCP_CLIENT=pycharm
    ```
 
-## Docker Usage
+### Docker Usage
 
 To use Alpaca MCP Server with Docker, please follow the steps below.
 
 **Prerequisite:**  
 You must have [Docker installed](https://docs.docker.com/get-docker/) on your system.
 
-### Run the latest published image (recommended for most users)
+#### Run the latest published image (recommended for most users)
 ```bash
 docker run -it --rm \
   -e ALPACA_API_KEY=your_alpaca_api_key \
@@ -362,7 +459,7 @@ docker run -it --rm \
 ```
 This pulls and runs the latest published version of the server. Replace `your_alpaca_api_key` and `your_alpaca_secret_key` with your actual keys. If the server exposes a port (e.g., 8080), add `-p 8080:8080` to the command.
 
-### Build and run locally (for development or custom changes)
+#### Build and run locally (for development or custom changes)
 ```bash
 docker build -t alpaca-mcp-server .
 docker run -it --rm \
@@ -372,7 +469,7 @@ docker run -it --rm \
 ```
 Use this if you want to run a modified or development version of the server.
 
-### Using with Claude Desktop
+#### Using with Claude Desktop
 ```json
 {
   "mcpServers": {
@@ -400,46 +497,6 @@ Environment variables can be set either with `-e` flags or in the `"env"` object
 
 **For more advanced Docker usage:**  See the [official Docker documentation](https://docs.docker.com/).
 
-## 4. API Key Configuration for Live Trading
-
-This MCP server connects to Alpaca's **paper trading API** by default for safe testing.
-To enable **live trading with real funds**, update the following configuration files:
-
-### Set Your API Credentials in Two Places:
-
-1. **Update environment file in the project directory**
-
-    Provide your live account keys as environment variables in the `.env` file:
-    ```
-    ALPACA_API_KEY = "your_alpaca_api_key_for_live_account"
-    ALPACA_SECRET_KEY = "your_alpaca_secret_key_for_live_account"
-    ALPACA_PAPER_TRADE = False
-    TRADE_API_URL = None
-    TRADE_API_WSS = None
-    DATA_API_URL = None
-    STREAM_DATA_WSS = None
-    ```
-
-2. **Update Configuration file**
-
-   For example, when using Claude Desktop, provide your live account keys as environment variables in `claude_desktop_config.json`:
-
-   ```json
-   {
-     "mcpServers": {
-       "alpaca": {
-         "command": "<project_root>/venv/bin/python",
-         "args": [
-           "/path/to/alpaca_mcp_server.py"
-         ],
-         "env": {
-           "ALPACA_API_KEY": "your_alpaca_api_key_for_live_account",
-           "ALPACA_SECRET_KEY": "your_alpaca_secret_key_for_live_account"
-         }
-       }
-     }
-   }
-   ```
 
 ## Available Tools
 
@@ -467,18 +524,23 @@ To enable **live trading with real funds**, update the following configuration f
 * `cancel_order_by_id(order_id)` – Cancel a specific order
 * `cancel_all_orders()` – Cancel all open orders
 
+### Crypto
+
+* `place_crypto_order(symbol, side, order_type="market", time_in_force="gtc", qty=None, notional=None, limit_price=None, stop_price=None, client_order_id=None)` – Place a crypto order supporting market, limit, and stop_limit types with GTC/IOC time in force
+
 ### Options
 
-* `get_option_contracts(underlying_symbol, expiration_date=None, expiration_month=None, expiration_year=None, expiration_week_start=None, strike_price_gte=None, strike_price_lte=None, type=None, status=None, root_symbol=None, limit=None)` – Fetch contracts with comprehensive filtering options
+* `get_option_contracts(underlying_symbol, expiration_date=None, expiration_date_gte=None, expiration_date_lte=None, expiration_expression=None, strike_price_gte=None, strike_price_lte=None, type=None, status=None, root_symbol=None, limit=None)` – – Get option contracts with flexible filtering.
 * `get_option_latest_quote(option_symbol)` – Latest bid/ask on contract
 * `get_option_snapshot(symbol_or_symbols)` – Get Greeks and underlying
 * `place_option_market_order(legs, order_class=None, quantity=1, time_in_force=TimeInForce.DAY, extended_hours=False)` – Execute option strategy
+* `exercise_options_position(symbol_or_contract_id)` – Exercise a held option contract, converting it into the underlying asset
 
 ### Market Info & Corporate Actions
 
 * `get_market_clock()` – Market open/close schedule
 * `get_market_calendar(start, end)` – Holidays and trading days
-* `get_corporate_announcements(...)` – Historical earnings, dividends, splits
+* `get_corporate_announcements(ca_types, start, end, symbols)` – Historical and future corporate actions (e.g., earnings, dividends, splits)
 
 ### Watchlists
 
@@ -492,7 +554,7 @@ To enable **live trading with real funds**, update the following configuration f
 * `get_all_assets(status=None, asset_class=None, exchange=None, attributes=None)` – List all tradable instruments with filtering options
 
 ## Example Natural Language Queries
-See the "Example Queries" section below for 50 real examples covering everything from trading to corporate data to option strategies.
+See the "Example Queries" section below for real examples covering everything from trading to corporate data to option strategies.
 
 ### Basic Trading
 1. What's my current account balance and buying power on Alpaca?
@@ -506,60 +568,64 @@ See the "Example Queries" section below for 50 real examples covering everything
 9. Place a limit order to buy 100 shares of MSFT at $450.
 10. Place a market order to sell 25 shares of META.
 
+### Crypto Trading
+11. Place a market order to buy 0.01 ETH/USD.
+12. Place a limit order to sell 0.01 BTC/USD at $110,000.
+
 ### Option Trading
-11. Show me available option contracts for AAPL expiring next month.
-12. Get the latest quote for the AAPL250613C00200000 option.
-13. Retrieve the option snapshot for the SPY250627P00400000 option.
-14. Liquidate my position in 2 contracts of QQQ calls expiring next week.
-15. Place a market order to buy 1 call option on AAPL expiring next Friday.
-16. What are the option Greeks for the TSLA250620P00500000 option?
-17. Find TSLA option contracts with strike prices within 5% of the current market price.
-18. Get SPY call options expiring the week of June 16th, 2025, within 10% of market price.
-19. Place a bull call spread using AAPL June 6th options: one with a 190.00 strike and the other with a 200.00 strike.
+13. Show me available option contracts for AAPL expiring next month.
+14. Get the latest quote for the AAPL250613C00200000 option.
+15. Retrieve the option snapshot for the SPY250627P00400000 option.
+16. Liquidate my position in 2 contracts of QQQ calls expiring next week.
+17. Place a market order to buy 1 call option on AAPL expiring next Friday.
+18. What are the option Greeks for the TSLA250620P00500000 option?
+19. Find TSLA option contracts with strike prices within 5% of the current market price.
+20. Get SPY call options expiring the week of June 16th, 2025, within 10% of market price.
+21. Place a bull call spread using AAPL June 6th options: one with a 190.00 strike and the other with a 200.00 strike.
+22. Exercise my NVDA call option contract NVDA250919C001680.
 
 ### Market Information
-20. Is the US stock market currently open?
-21. What are the market open and close times today?
-22. Show me the market calendar for next week.
-23. Show me recent cash dividends and stock splits for AAPL, MSFT, and GOOGL in the last 3 months.
-24. Get all corporate actions for SPY including dividends, splits, and any mergers in the past year.
-25. What are the upcoming corporate actions scheduled for SPY in the next 6 months?
+23. What are the market open and close times today?
+24. Show me the market calendar for next week.
+25. Show me recent cash dividends and stock splits for AAPL, MSFT, and GOOGL in the last 3 months.
+26. Get all corporate actions for SPY including dividends, splits, and any mergers in the past year.
+27. What are the upcoming corporate actions scheduled for SPY in the next 6 months?
 
 ### Historical & Real-time Data
-26. Show me AAPL's daily price history for the last 5 trading days.
-27. What was the closing price of TSLA yesterday?
-28. Get the latest bar for GOOGL.
-29. What was the latest trade price for NVDA?
-30. Show me the most recent quote for MSFT.
-31. Retrieve the last 100 trades for AMD.
-32. Show me 1-minute bars for AMZN from the last 2 hours.
-33. Get 5-minute intraday bars for TSLA from last Tuesday through last Friday.
-34. Get a comprehensive stock snapshot for AAPL showing latest quote, trade, minute bar, daily bar, and previous daily bar all in one view.
-35. Compare market snapshots for TSLA, NVDA, and MSFT to analyze their current bid/ask spreads, latest trade prices, and daily performance.
+28. Show me AAPL's daily price history for the last 5 trading days.
+29. What was the closing price of TSLA yesterday?
+30. Get the latest bar for GOOGL.
+31. What was the latest trade price for NVDA?
+32. Show me the most recent quote for MSFT.
+33. Retrieve the last 100 trades for AMD.
+34. Show me 1-minute bars for AMZN from the last 2 hours.
+35. Get 5-minute intraday bars for TSLA from last Tuesday through last Friday.
+36. Get a comprehensive stock snapshot for AAPL showing latest quote, trade, minute bar, daily bar, and previous daily bar all in one view.
+37. Compare market snapshots for TSLA, NVDA, and MSFT to analyze their current bid/ask spreads, latest trade prices, and daily performance.
 
 ### Orders
-36. Show me all my open and filled orders from this week.
-37. What orders do I have for AAPL?
-38. List all limit orders I placed in the past 3 days.
-39. Filter all orders by status: filled.
-40. Get me the order history for yesterday.
+38. Show me all my open and filled orders from this week.
+39. What orders do I have for AAPL?
+40. List all limit orders I placed in the past 3 days.
+41. Filter all orders by status: filled.
+42. Get me the order history for yesterday.
 
 ### Watchlists
 > At this moment, you can only view and update trading watchlists created via Alpaca’s Trading API through the API itself
-41. Create a new watchlist called "Tech Stocks" with AAPL, MSFT, and NVDA.
-42. Update my "Tech Stocks" watchlist to include TSLA and AMZN.
-43. What stocks are in my "Dividend Picks" watchlist?
-44. Remove META from my "Growth Portfolio" watchlist.
-45. List all my existing watchlists.
+43. Create a new watchlist called "Tech Stocks" with AAPL, MSFT, and NVDA.
+44. Update my "Tech Stocks" watchlist to include TSLA and AMZN.
+45. What stocks are in my "Dividend Picks" watchlist?
+46. Remove META from my "Growth Portfolio" watchlist.
+47. List all my existing watchlists.
 
 ### Asset Information
-46. Search for details about the asset 'AAPL'.
-47. Show me the top 5 tradable crypto assets by trading volume.
-48. Filter assets with status 'active' for tech stocks.
+48. Search for details about the asset 'AAPL'.
+49. Show me the top 5 tradable crypto assets by trading volume.
+50. Get all NASDAQ active US equity assets and filter the results to show only tradable securities
 
 ### Combined Scenarios
-49. Get today's market clock and show me my buying power before placing a limit buy order for TSLA at $340.
-50. Place a bull call spread with SPY July 3rd options: buy one 5% above and sell one 3% below the current SPY price.
+51. Get today's market clock and show me my buying power before placing a limit buy order for TSLA at $340.
+52. Place a bull call spread with SPY July 3rd options: buy one 5% above and sell one 3% below the current SPY price.
 
 ## Example Outputs
 
