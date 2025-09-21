@@ -21,8 +21,7 @@ dependencies = [
 alpaca-mcp = "alpaca_mcp_server:main"
 
 [tool.setuptools]
-py-modules = ["alpaca_mcp_server"]
-packages = ["alpaca_mcp_server_github"]
+py-modules = ["alpaca_mcp_server", "user_agent_mixin"]
 
 [project.optional-dependencies]
 dev = ["ruff>=0.5", "black>=24", "pytest>=8", "mypy>=1.10"]

@@ -64,8 +64,8 @@ from alpaca.trading.requests import (
 
 from mcp.server.fastmcp import FastMCP
 
-# Import the UserAgentMixin from the alpaca_mcp_server_github.core package
-from alpaca_mcp_server_github.core.user_agent_mixin import UserAgentMixin
+# Import the UserAgentMixin from the local module
+from user_agent_mixin import UserAgentMixin
 # Define new classes using the mixin
 class TradingClientSigned(UserAgentMixin, TradingClient): pass
 class StockHistoricalDataClientSigned(UserAgentMixin, StockHistoricalDataClient): pass
