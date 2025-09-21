@@ -5,14 +5,17 @@ This is a Model Context Protocol (MCP) server implementation for Alpaca's Tradin
 ## 🚀 Quick Installation
 
 ```bash
-# Install and configure in one step
+# Install the package
+uvx --from git+https://github.com/idsts2670/alpaca-mcp-server.git alpaca-mcp
+
+# Configure your credentials
 uvx --from git+https://github.com/idsts2670/alpaca-mcp-server.git alpaca-mcp init
 
-# Then start the server
+# Start the server
 uvx --from git+https://github.com/idsts2670/alpaca-mcp-server.git alpaca-mcp serve
 ```
 
-**For detailed installation instructions, see [INSTALLATION.md](INSTALLATION.md)**
+**The init command will guide you through setting up your Alpaca API credentials and choosing between paper trading and live trading.**
 
 ## Features
 

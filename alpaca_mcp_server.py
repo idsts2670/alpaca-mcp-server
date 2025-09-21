@@ -139,10 +139,10 @@ load_dotenv()
 TRADE_API_KEY = os.getenv("ALPACA_API_KEY")
 TRADE_API_SECRET = os.getenv("ALPACA_SECRET_KEY")
 ALPACA_PAPER_TRADE = os.getenv("ALPACA_PAPER_TRADE", "True")
-TRADE_API_URL = os.getenv("TRADE_API_URL")
-TRDE_API_WSS = os.getenv("TRDE_API_WSS")
-DATA_API_URL = os.getenv("DATA_API_URL")
-STREAM_DATA_WSS = os.getenv("STREAM_DATA_WSS")
+TRADE_API_URL = os.getenv("TRADE_API_URL") or None
+TRDE_API_WSS = os.getenv("TRDE_API_WSS") or None
+DATA_API_URL = os.getenv("DATA_API_URL") or None
+STREAM_DATA_WSS = os.getenv("STREAM_DATA_WSS") or None
 DEBUG = os.getenv("DEBUG", "False")
 
 # Initialize FastMCP server with intelligent log level detection
@@ -153,55 +153,31 @@ log_level = "DEBUG" if DEBUG.lower() == "true" else log_level
 # Optional: Print detection result for debugging (only in non-PyCharm environments)
 # Only print when running as main script to avoid noise when imported
 if not is_pycharm and __name__ == "__main__":
-    print(f"MCP Server starting with log_level={log_level} (PyCharm detected: {is_pycharm})")
+    print(f"MCP Server starting with transport={args.transport}, log_level={log_level} (PyCharm detected: {is_pycharm})")
 
 mcp = FastMCP("alpaca-trading", log_level=log_level)
 
 
-# Check if keys are available (only when actually needed)
-def check_credentials():
-    if not TRADE_API_KEY or not TRADE_API_SECRET:
-        print("❌ Alpaca API credentials not found!")
-        print()
-        print("🔧 To fix this, run:")
-        print("   alpaca-mcp init")
-        print()
-        print("This will guide you through setting up your credentials.")
-        raise ValueError("Alpaca API credentials not found in environment variables.")
-
-# Safe credential check that doesn't raise errors
-def credentials_available():
-    return bool(TRADE_API_KEY and TRADE_API_SECRET)
+# Check if keys are available
+if not TRADE_API_KEY or not TRADE_API_SECRET:
+    raise ValueError("Alpaca API credentials not found in environment variables.")
 
 # Convert string to boolean
 ALPACA_PAPER_TRADE_BOOL = ALPACA_PAPER_TRADE.lower() not in ['false', '0', 'no', 'off']
 
-# Initialize clients (only when credentials are available)
-def initialize_clients():
-    check_credentials()
-    # For trading
-    trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)
-    # For historical market data
-    stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
-    # For streaming market data
-    stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_override=STREAM_DATA_WSS)
-    # For option historical data
-    option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-    # For corporate actions data
-    corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-    # For crypto historical data
-    crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-    
-    return (trade_client, stock_historical_data_client, stock_data_stream_client, 
-            option_historical_data_client, corporate_actions_client, crypto_historical_data_client)
-
-# Initialize clients as None - will be set up when needed
-trade_client = None
-stock_historical_data_client = None
-stock_data_stream_client = None
-option_historical_data_client = None
-corporate_actions_client = None
-crypto_historical_data_client = None
+# Initialize clients
+# For trading
+trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)
+# For historical market data
+stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
+# For streaming market data
+stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_override=STREAM_DATA_WSS)
+# For option historical data
+option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+# For corporate actions data
+corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+# For crypto historical data
+crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
 
 # ----------------------------------------------------------------------------
 # Centralized date parsing helpers
@@ -2863,32 +2839,16 @@ def _prompt_bool(prompt: str, default: bool = True) -> bool:
     return val in {"y", "yes", "true", "1"}
 
 def cmd_init():
-    print("🚀 Alpaca MCP Server Setup")
+    print("Alpaca MCP Server Setup")
     print("=" * 40)
     print("This will create a .env file with your Alpaca credentials.")
-    print("You can get your API keys from: https://app.alpaca.markets/")
+    print("Get your API keys from: https://app.alpaca.markets/")
     print()
     
-    # Get API credentials with validation
-    while True:
-        api_key = input("📝 Enter your Alpaca API Key: ").strip()
-        if api_key:
-            break
-        print("❌ API Key cannot be empty. Please try again.")
-    
-    while True:
-        secret_key = input("🔐 Enter your Alpaca Secret Key: ").strip()
-        if secret_key:
-            break
-        print("❌ Secret Key cannot be empty. Please try again.")
-    
-    # Ask about paper trading with clear explanation
-    print()
-    print("📊 Paper Trading:")
-    print("  • Yes (True) = Use paper trading (recommended for testing)")
-    print("  • No (False) = Use live trading (real money)")
+    api_key = input("ALPACA_API_KEY: ").strip()
+    secret_key = input("ALPACA_SECRET_KEY: ").strip()
     paper = _prompt_bool("Use paper trading (recommended for testing)")
-
+    
     # Set URLs based on paper trading preference
     if paper:
         trade_api_url = "https://paper-api.alpaca.markets"
@@ -2901,7 +2861,6 @@ def cmd_init():
         data_api_url = "https://data.alpaca.markets"
         stream_data_wss = "wss://stream.data.alpaca.markets/v2/iex"
 
-    # Create .env file
     env_path = Path(".env")
     lines = [
         '# Generated by "alpaca-mcp init"',
@@ -2917,33 +2876,19 @@ def cmd_init():
     env_path.write_text("\n".join(lines))
     
     print()
-    print("✅ Configuration saved successfully!")
-    print(f"📁 Environment file: {env_path.resolve()}")
+    print("Configuration saved successfully!")
+    print(f"Environment file: {env_path.resolve()}")
     print()
-    print("🚀 Next steps:")
+    print("Next steps:")
     print("  1. Run: alpaca-mcp serve")
     print("  2. Or run: alpaca-mcp serve --transport http --port 8000")
-    print()
     if paper:
-        print("📊 You're using PAPER TRADING (no real money)")
+        print("You're using PAPER TRADING (no real money)")
     else:
-        print("⚠️  You're using LIVE TRADING (real money)")
+        print("⚠️ You're using LIVE TRADING (real money)")
 
 def cmd_serve():
     print("Starting Alpaca MCP server...")
-    
-    # Initialize clients if not already done
-    global trade_client, stock_historical_data_client, stock_data_stream_client
-    global option_historical_data_client, corporate_actions_client, crypto_historical_data_client
-    
-    if trade_client is None:
-        try:
-            (trade_client, stock_historical_data_client, stock_data_stream_client, 
-             option_historical_data_client, corporate_actions_client, crypto_historical_data_client) = initialize_clients()
-        except ValueError as e:
-            print(f"❌ {e}")
-            return
-    
     # Use the existing server bootstrap logic
     args = parse_arguments()
     transport_config = setup_transport_config(args)
@@ -2977,17 +2922,14 @@ def main():
     import argparse
     p = argparse.ArgumentParser(
         prog="alpaca-mcp",
-        description="Alpaca MCP Server - Trading tools over MCP protocol",
-        epilog="Get started: alpaca-mcp init"
+        description="Alpaca MCP Server - Trading tools over Alpaca Trading API"
     )
     sub = p.add_subparsers(dest="cmd", required=False)
 
-    init_parser = sub.add_parser("init", help="🔧 Setup your Alpaca API credentials")
-    init_parser.description = "Interactive setup for Alpaca API credentials and paper trading preference"
+    sub.add_parser("init", help="Setup your Alpaca API credentials")
 
     # Add serve subcommand with transport options
-    serve_parser = sub.add_parser("serve", help="🚀 Start the MCP server")
-    serve_parser.description = "Start the Alpaca MCP server with your configured credentials"
+    serve_parser = sub.add_parser("serve", help="Start the MCP server using environment variables")
     serve_parser.add_argument(
         "--transport",
         choices=["stdio", "http", "sse"],
@@ -3008,37 +2950,16 @@ def main():
 
     args = p.parse_args()
     
-    # If no command provided, show welcome message and guide to setup
+    # If no command provided, show welcome message
     if args.cmd is None:
-        print("🚀 Welcome to Alpaca MCP Server!")
+        print("Welcome to Alpaca MCP Server!")
         print("=" * 50)
         print()
-        print("This server provides trading tools over the MCP protocol.")
+        print("To get started:")
+        print("  1. Run: alpaca-mcp init")
+        print("  2. Then run: alpaca-mcp serve")
         print()
-        
-        # Check if credentials are already configured
-        env_path = Path(".env")
-        if env_path.exists():
-            print("✅ Configuration file found (.env)")
-            print()
-            print("Available commands:")
-            print("  alpaca-mcp serve     - Start the MCP server")
-            print("  alpaca-mcp init      - Reconfigure credentials")
-            print()
-            print("To start the server, run:")
-            print("  alpaca-mcp serve")
-        else:
-            print("❌ No configuration found")
-            print()
-            print("To get started, you need to configure your Alpaca API credentials.")
-            print("Run the following command to set up your credentials:")
-            print()
-            print("  alpaca-mcp init")
-            print()
-            print("This will guide you through:")
-            print("  • Setting up your Alpaca API key and secret")
-            print("  • Choosing between paper trading and live trading")
-            print("  • Creating a .env configuration file")
+        print("For help: alpaca-mcp --help")
         return
     
     if args.cmd == "init":
@@ -3062,5 +2983,39 @@ def main():
 
 # Run the server
 if __name__ == "__main__":
-    # Always use the new CLI approach
-    main()
+    # Check if we should use the new CLI (if any CLI commands are passed)
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ["init", "serve"]:
+        main()
+    else:
+        # Use the existing server startup logic for backwards compatibility
+        # Parse command line arguments when running as main script
+        args = parse_arguments()
+
+        # Setup transport configuration based on command line arguments
+        transport_config = setup_transport_config(args)
+
+        try:
+            # Run server with the specified transport
+            if args.transport == "http":
+                mcp.settings.host = transport_config["host"]
+                mcp.settings.port = transport_config["port"]
+                mcp.run(transport="streamable-http")
+            elif args.transport == "sse":
+                mcp.settings.host = transport_config["host"]
+                mcp.settings.port = transport_config["port"]
+                mcp.run(transport="sse")
+            else:
+                mcp.run(transport="stdio")
+        except Exception as e:
+            if args.transport in ["http", "sse"]:
+                print(f"Error starting {args.transport} server: {e}")
+                print(f"Server was configured to run on {transport_config['host']}:{transport_config['port']}")
+                print("Common solutions:")
+                print(f"1. Ensure port {transport_config['port']} is available")
+                print(f"2. Check if another service is using port {transport_config['port']}")
+                print("3. Try using a different port with --port <PORT>")
+                print("4. For remote access, consider using SSH tunneling or reverse proxy")
+            else:
+                print(f"Error starting MCP server: {e}")
+            sys.exit(1)
