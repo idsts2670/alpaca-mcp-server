@@ -64,13 +64,8 @@ from alpaca.trading.requests import (
 
 from mcp.server.fastmcp import FastMCP
 
-# Configure Python path for local imports
-current_dir = os.path.dirname(os.path.abspath(__file__))
-github_core_path = os.path.join(current_dir, '.github', 'core')
-if github_core_path not in sys.path:
-    sys.path.insert(0, github_core_path)
-# Import the UserAgentMixin
-from user_agent_mixin import UserAgentMixin
+# Import the UserAgentMixin from the alpaca_mcp_server_github.core package
+from alpaca_mcp_server_github.core.user_agent_mixin import UserAgentMixin
 # Define new classes using the mixin
 class TradingClientSigned(UserAgentMixin, TradingClient): pass
 class StockHistoricalDataClientSigned(UserAgentMixin, StockHistoricalDataClient): pass
