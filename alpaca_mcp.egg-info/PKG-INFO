@@ -1,3 +1,23 @@
+Metadata-Version: 2.4
+Name: alpaca-mcp
+Version: 0.1.0
+Summary: Alpaca MCP server providing trading tools over MCP
+License-Expression: MIT
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: alpaca-py
+Requires-Dist: mcp
+Requires-Dist: python-dotenv
+Requires-Dist: matplotlib
+Requires-Dist: pandas
+Provides-Extra: dev
+Requires-Dist: ruff>=0.5; extra == "dev"
+Requires-Dist: black>=24; extra == "dev"
+Requires-Dist: pytest>=8; extra == "dev"
+Requires-Dist: mypy>=1.10; extra == "dev"
+Dynamic: license-file
+
 # Alpaca MCP Server
 
 This is a Model Context Protocol (MCP) server implementation for Alpaca's Trading API. It enables large language models (LLMs) on Claude Desktop, Cursor, or VScode to interact with Alpaca's trading infrastructure using natural language (English). This server supports stock trading, options trading, portfolio management, watchlist handling, and real-time market data access.

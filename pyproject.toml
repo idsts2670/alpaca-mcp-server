@@ -7,7 +7,7 @@ name = "alpaca-mcp"
 version = "0.1.0"
 description = "Alpaca MCP server providing trading tools over MCP"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
   "alpaca-py",
@@ -19,12 +19,11 @@ dependencies = [
 
 [project.scripts]
 alpaca-mcp = "alpaca_mcp_server:main"
+alpaca-mcp-init = "alpaca_mcp_server:cmd_init"
+alpaca-mcp-serve = "alpaca_mcp_server:cmd_serve"
 
 [tool.setuptools]
 py-modules = ["alpaca_mcp_server", "user_agent_mixin"]
-
-[tool.setuptools.package-data]
-"*" = [".env.example"]
 
 [project.optional-dependencies]
 dev = ["ruff>=0.5", "black>=24", "pytest>=8", "mypy>=1.10"]

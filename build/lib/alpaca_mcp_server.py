@@ -153,7 +153,7 @@ log_level = "DEBUG" if DEBUG.lower() == "true" else log_level
 # Optional: Print detection result for debugging (only in non-PyCharm environments)
 # Only print when running as main script to avoid noise when imported
 if not is_pycharm and __name__ == "__main__":
-    print(f"MCP Server starting with log_level={log_level} (PyCharm detected: {is_pycharm})")
+    print(f"MCP Server starting with transport={args.transport}, log_level={log_level} (PyCharm detected: {is_pycharm})")
 
 mcp = FastMCP("alpaca-trading", log_level=log_level)
 
@@ -168,10 +168,6 @@ def check_credentials():
         print()
         print("This will guide you through setting up your credentials.")
         raise ValueError("Alpaca API credentials not found in environment variables.")
-
-# Safe credential check that doesn't raise errors
-def credentials_available():
-    return bool(TRADE_API_KEY and TRADE_API_SECRET)
 
 # Convert string to boolean
 ALPACA_PAPER_TRADE_BOOL = ALPACA_PAPER_TRADE.lower() not in ['false', '0', 'no', 'off']
@@ -195,13 +191,18 @@ def initialize_clients():
     return (trade_client, stock_historical_data_client, stock_data_stream_client, 
             option_historical_data_client, corporate_actions_client, crypto_historical_data_client)
 
-# Initialize clients as None - will be set up when needed
-trade_client = None
-stock_historical_data_client = None
-stock_data_stream_client = None
-option_historical_data_client = None
-corporate_actions_client = None
-crypto_historical_data_client = None
+# Initialize clients immediately for backward compatibility when serve is called
+try:
+    (trade_client, stock_historical_data_client, stock_data_stream_client, 
+     option_historical_data_client, corporate_actions_client, crypto_historical_data_client) = initialize_clients()
+except ValueError:
+    # Credentials not available - this is OK for init command
+    trade_client = None
+    stock_historical_data_client = None
+    stock_data_stream_client = None
+    option_historical_data_client = None
+    corporate_actions_client = None
+    crypto_historical_data_client = None
 
 # ----------------------------------------------------------------------------
 # Centralized date parsing helpers
@@ -2931,19 +2932,6 @@ def cmd_init():
 
 def cmd_serve():
     print("Starting Alpaca MCP server...")
-    
-    # Initialize clients if not already done
-    global trade_client, stock_historical_data_client, stock_data_stream_client
-    global option_historical_data_client, corporate_actions_client, crypto_historical_data_client
-    
-    if trade_client is None:
-        try:
-            (trade_client, stock_historical_data_client, stock_data_stream_client, 
-             option_historical_data_client, corporate_actions_client, crypto_historical_data_client) = initialize_clients()
-        except ValueError as e:
-            print(f"❌ {e}")
-            return
-    
     # Use the existing server bootstrap logic
     args = parse_arguments()
     transport_config = setup_transport_config(args)
@@ -3062,5 +3050,39 @@ def main():
 
 # Run the server
 if __name__ == "__main__":
-    # Always use the new CLI approach
-    main()
+    # Check if we should use the new CLI (if any CLI commands are passed)
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ["init", "serve"]:
+        main()
+    else:
+        # Use the existing server startup logic for backwards compatibility
+        # Parse command line arguments when running as main script
+        args = parse_arguments()
+
+        # Setup transport configuration based on command line arguments
+        transport_config = setup_transport_config(args)
+
+        try:
+            # Run server with the specified transport
+            if args.transport == "http":
+                mcp.settings.host = transport_config["host"]
+                mcp.settings.port = transport_config["port"]
+                mcp.run(transport="streamable-http")
+            elif args.transport == "sse":
+                mcp.settings.host = transport_config["host"]
+                mcp.settings.port = transport_config["port"]
+                mcp.run(transport="sse")
+            else:
+                mcp.run(transport="stdio")
+        except Exception as e:
+            if args.transport in ["http", "sse"]:
+                print(f"Error starting {args.transport} server: {e}")
+                print(f"Server was configured to run on {transport_config['host']}:{transport_config['port']}")
+                print("Common solutions:")
+                print(f"1. Ensure port {transport_config['port']} is available")
+                print(f"2. Check if another service is using port {transport_config['port']}")
+                print("3. Try using a different port with --port <PORT>")
+                print("4. For remote access, consider using SSH tunneling or reverse proxy")
+            else:
+                print(f"Error starting MCP server: {e}")
+            sys.exit(1)

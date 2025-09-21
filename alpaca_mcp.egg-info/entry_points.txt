@@ -1,0 +1,4 @@
+[console_scripts]
+alpaca-mcp = alpaca_mcp_server:main
+alpaca-mcp-init = alpaca_mcp_server:cmd_init
+alpaca-mcp-serve = alpaca_mcp_server:cmd_serve
