@@ -132,70 +132,52 @@ class DefaultArgs:
 # Only parse arguments when running as main script, use defaults when imported
 args = DefaultArgs()
 
-# Global variables for clients - will be initialized later
-trade_client = None
-stock_historical_data_client = None
-stock_data_stream_client = None
-option_historical_data_client = None
-corporate_actions_client = None
-crypto_historical_data_client = None
-mcp = None
+# Initialize Alpaca clients using environment variables
+# Import our .env file within the same directory
+load_dotenv()
 
-def initialize_clients():
-    """Initialize Alpaca clients using environment variables. Call this after .env is set up."""
-    global trade_client, stock_historical_data_client, stock_data_stream_client
-    global option_historical_data_client, corporate_actions_client, crypto_historical_data_client, mcp
-    
-    # Load environment variables
-    load_dotenv()
-    
-    TRADE_API_KEY = os.getenv("ALPACA_API_KEY")
-    TRADE_API_SECRET = os.getenv("ALPACA_SECRET_KEY")
-    ALPACA_PAPER_TRADE = os.getenv("ALPACA_PAPER_TRADE", "True")
-    TRADE_API_URL = os.getenv("TRADE_API_URL")
-    TRDE_API_WSS = os.getenv("TRDE_API_WSS")
-    DATA_API_URL = os.getenv("DATA_API_URL")
-    STREAM_DATA_WSS = os.getenv("STREAM_DATA_WSS")
-    DEBUG = os.getenv("DEBUG", "False")
-    
-    # Check if keys are available
-    if not TRADE_API_KEY or not TRADE_API_SECRET:
-        raise ValueError("Alpaca API credentials not found in environment variables. Please run 'alpaca-mcp init' first.")
-    
-    # Initialize FastMCP server with intelligent log level detection
-    is_pycharm = detect_pycharm_environment()
-    log_level = "ERROR" if is_pycharm else "INFO"
-    log_level = "DEBUG" if DEBUG.lower() == "true" else log_level
-    
-    # Optional: Print detection result for debugging (only in non-PyCharm environments)
-    # Only print when running as main script to avoid noise when imported
-    if not is_pycharm and __name__ == "__main__":
-        print(f"MCP Server starting with transport={args.transport}, log_level={log_level} (PyCharm detected: {is_pycharm})")
-    
-    mcp = FastMCP("alpaca-trading", log_level=log_level)
-    
-    # Convert string to boolean
-    ALPACA_PAPER_TRADE_BOOL = ALPACA_PAPER_TRADE.lower() not in ['false', '0', 'no', 'off']
-    
-    # Initialize clients
-    # For trading
-    trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)
-    # For historical market data
-    stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
-    # For streaming market data
-    stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_override=STREAM_DATA_WSS)
-    # For option historical data
-    option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-    # For corporate actions data
-    corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-    # For crypto historical data
-    crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+TRADE_API_KEY = os.getenv("ALPACA_API_KEY")
+TRADE_API_SECRET = os.getenv("ALPACA_SECRET_KEY")
+ALPACA_PAPER_TRADE = os.getenv("ALPACA_PAPER_TRADE", "True")
+TRADE_API_URL = os.getenv("TRADE_API_URL")
+TRDE_API_WSS = os.getenv("TRDE_API_WSS")
+DATA_API_URL = os.getenv("DATA_API_URL")
+STREAM_DATA_WSS = os.getenv("STREAM_DATA_WSS")
+DEBUG = os.getenv("DEBUG", "False")
 
-def ensure_clients_initialized():
-    """Ensure clients are initialized before use."""
-    global mcp
-    if mcp is None:
-        initialize_clients()
+# Initialize FastMCP server with intelligent log level detection
+is_pycharm = detect_pycharm_environment()
+log_level = "ERROR" if is_pycharm else "INFO"
+log_level = "DEBUG" if DEBUG.lower() == "true" else log_level
+
+# Optional: Print detection result for debugging (only in non-PyCharm environments)
+# Only print when running as main script to avoid noise when imported
+if not is_pycharm and __name__ == "__main__":
+    print(f"MCP Server starting with transport={args.transport}, log_level={log_level} (PyCharm detected: {is_pycharm})")
+
+mcp = FastMCP("alpaca-trading", log_level=log_level)
+
+
+# Check if keys are available
+if not TRADE_API_KEY or not TRADE_API_SECRET:
+    raise ValueError("Alpaca API credentials not found in environment variables.")
+
+# Convert string to boolean
+ALPACA_PAPER_TRADE_BOOL = ALPACA_PAPER_TRADE.lower() not in ['false', '0', 'no', 'off']
+
+# Initialize clients
+# For trading
+trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)
+# For historical market data
+stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
+# For streaming market data
+stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_override=STREAM_DATA_WSS)
+# For option historical data
+option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+# For corporate actions data
+corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+# For crypto historical data
+crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
 
 # ----------------------------------------------------------------------------
 # Centralized date parsing helpers
@@ -262,7 +244,6 @@ async def get_account_info() -> str:
             - Pattern Day Trader Status
             - Day Trades Remaining
     """
-    ensure_clients_initialized()
     account = trade_client.get_account()
     
     info = f"""
@@ -296,7 +277,6 @@ async def get_positions() -> str:
             - Current Price
             - Unrealized P/L
     """
-    ensure_clients_initialized()
     positions = trade_client.get_all_positions()
     
     if not positions:
@@ -367,7 +347,6 @@ async def get_stock_quote(symbol: str) -> str:
             - Bid Size
             - Timestamp
     """
-    ensure_clients_initialized()
     try:
         request_params = StockLatestQuoteRequest(symbol_or_symbols=symbol)
         quotes = stock_historical_data_client.get_stock_latest_quote(request_params)
@@ -2860,98 +2839,32 @@ def _prompt_bool(prompt: str, default: bool = True) -> bool:
     return val in {"y", "yes", "true", "1"}
 
 def cmd_init():
-    """Initialize the .env file by copying from .env.example and prompting for credentials."""
-    print("Alpaca MCP Server Setup")
-    print("======================")
-    print("This will create a .env file with your Alpaca API credentials.")
-    print()
-    
-    # Check if .env.example exists
-    env_example_path = Path(".env.example")
-    if not env_example_path.exists():
-        print("Error: .env.example file not found. Please ensure the package is properly installed.")
-        return
-    
-    # Copy .env.example to .env
-    env_path = Path(".env")
-    if env_path.exists():
-        overwrite = _prompt_bool("A .env file already exists. Overwrite it?", False)
-        if not overwrite:
-            print("Setup cancelled.")
-            return
-    
-    # Copy the example file
-    env_content = env_example_path.read_text()
-    env_path.write_text(env_content)
-    print(f"Created .env file from .env.example")
-    print()
-    
-    # Prompt for credentials
-    print("Please enter your Alpaca API credentials:")
-    print("(You can get these from https://app.alpaca.markets/paper/dashboard/overview)")
-    print()
-    
+    print("This will create or update a .env file in the project directory.")
     api_key = input("ALPACA_API_KEY: ").strip()
-    if not api_key:
-        print("Error: API key is required.")
-        return
-    
     secret_key = input("ALPACA_SECRET_KEY: ").strip()
-    if not secret_key:
-        print("Error: Secret key is required.")
-        return
-    
-    paper = _prompt_bool("Use paper trading (recommended for testing)", True)
-    
-    # Optional settings
-    print()
-    print("Optional settings (press Enter to use defaults):")
-    trade_api_url = input("TRADE_API_URL: ").strip()
-    trade_api_wss = input("TRADE_API_WSS: ").strip()
-    data_api_url = input("DATA_API_URL: ").strip()
-    stream_data_wss = input("STREAM_DATA_WSS: ").strip()
-    debug = _prompt_bool("Enable debug mode", False)
+    paper = _prompt_bool("Use paper trading")
+    trade_api_url = input("TRADE_API_URL (enter to skip): ").strip()
+    trade_api_wss = input("TRADE_API_WSS (enter to skip): ").strip()
+    data_api_url = input("DATA_API_URL (enter to skip): ").strip()
+    stream_data_wss = input("STREAM_DATA_WSS (enter to skip): ").strip()
 
-    # Update the .env file with actual values
+    env_path = Path(".env")
     lines = [
         '# Generated by "alpaca-mcp init"',
         f'ALPACA_API_KEY="{api_key}"',
         f'ALPACA_SECRET_KEY="{secret_key}"',
         f"ALPACA_PAPER_TRADE={str(paper)}",
         f"TRADE_API_URL={trade_api_url or 'None'}",
-        f"TRDE_API_WSS={trade_api_wss or 'None'}",
+        f"TRADE_API_WSS={trade_api_wss or 'None'}",
         f"DATA_API_URL={data_api_url or 'None'}",
         f"STREAM_DATA_WSS={stream_data_wss or 'None'}",
-        f"DEBUG={str(debug)}",
         "",
     ]
     env_path.write_text("\n".join(lines))
-    
-    print()
-    print(f"✅ Configuration saved to {env_path.resolve()}")
-    print()
-    print("Next steps:")
-    print("1. Verify your credentials are correct")
-    print("2. Run 'alpaca-mcp serve' to start the MCP server")
-    print("3. Configure your MCP client to connect to the server")
-    print()
-    print("For more information, visit: https://github.com/idsts2670/alpaca-mcp-server")
+    print(f"Wrote {env_path.resolve()}")
 
 def cmd_serve():
     print("Starting Alpaca MCP server...")
-    
-    # Initialize clients first
-    try:
-        initialize_clients()
-    except ValueError as e:
-        print(f"Error: {e}")
-        print()
-        print("Please run 'alpaca-mcp init' first to set up your API credentials.")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error initializing clients: {e}")
-        sys.exit(1)
-    
     # Use the existing server bootstrap logic
     args = parse_arguments()
     transport_config = setup_transport_config(args)
@@ -3038,18 +2951,6 @@ if __name__ == "__main__":
         # Use the existing server startup logic for backwards compatibility
         # Parse command line arguments when running as main script
         args = parse_arguments()
-
-        # Initialize clients first
-        try:
-            initialize_clients()
-        except ValueError as e:
-            print(f"Error: {e}")
-            print()
-            print("Please run 'alpaca-mcp init' first to set up your API credentials.")
-            sys.exit(1)
-        except Exception as e:
-            print(f"Error initializing clients: {e}")
-            sys.exit(1)
 
         # Setup transport configuration based on command line arguments
         transport_config = setup_transport_config(args)
