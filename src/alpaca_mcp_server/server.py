@@ -110,19 +110,38 @@ class AlpacaMCPServer:
         """
         # Add the project root to Python path to import the original server
         project_root = Path(__file__).parent.parent.parent
-        original_server_path = project_root / "alpaca_mcp_server.py"
 
-        if not original_server_path.exists():
-            raise FileNotFoundError(f"Original server file not found: {original_server_path}")
+        legacy_filenames = [
+            "legacy_alpaca_mcp_server.py",
+            "alpaca_mcp_server.py"
+        ]
 
-        # Add project root to path temporarily
+        original_server_path = None
+        for candidate in legacy_filenames:
+            path = project_root / candidate
+            if path.exists():
+                original_server_path = path
+                break
+
+        if original_server_path is None:
+            raise FileNotFoundError(
+                "Original server file not found. Expected one of: "
+                + ", ".join(legacy_filenames)
+            )
+
+        # Add the directory containing the legacy module to the Python path temporarily
+        legacy_dir = original_server_path.parent
+
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
+        if str(legacy_dir) not in sys.path:
+            sys.path.insert(0, str(legacy_dir))
 
         try:
             # Import the original server module
             # This will execute all the tool registrations on our mcp instance
-            import alpaca_mcp_server as original_server
+            module_name = original_server_path.stem
+            original_server = __import__(module_name)
 
             # Copy the configured mcp instance with all registered tools
             # The original server module registers tools on a global 'mcp' variable
@@ -138,6 +157,8 @@ class AlpacaMCPServer:
             # Clean up path
             if str(project_root) in sys.path:
                 sys.path.remove(str(project_root))
+            if str(legacy_dir) in sys.path:
+                sys.path.remove(str(legacy_dir))
 
     def run(self, transport: str = "stdio", host: str = "127.0.0.1", port: int = 8000) -> None:
         """
