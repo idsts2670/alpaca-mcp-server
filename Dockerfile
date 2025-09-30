@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml requirements.txt README.md ./
 COPY src/ ./src/
 COPY alpaca_mcp_server.py ./
+COPY .github/core/user_agent_mixin.py ./user_agent_mixin.py
 
 # Install Python dependencies
 # Use pip instead of uvx for container environment
