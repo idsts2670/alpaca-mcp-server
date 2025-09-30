@@ -31,6 +31,9 @@ class ConfigManager:
         # Load existing environment variables if .env file exists
         if self.env_file.exists():
             load_dotenv(self.env_file)
+        else:
+            # Still allow configuration purely from environment variables
+            load_dotenv(override=False)
 
     def get_api_config(self) -> Dict[str, Any]:
         """

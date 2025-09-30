@@ -160,30 +160,33 @@ def serve(transport: str, host: str, port: int, config_file: Optional[Path]):
         alpaca-mcp serve --config-file ~/trading.env   # Custom config
     """
     try:
-        # Check if configuration exists
+        # Determine configuration source (env file or environment variables)
         config_path = config_file or Path(".env")
-        if not config_path.exists():
-            click.echo("Error: Configuration file not found.")
-            click.echo(f"   Looking for: {config_path.absolute()}")
-            click.echo()
-            click.echo("Run 'alpaca-mcp init' to create configuration first.")
-            sys.exit(1)
+        config = ConfigManager(config_path)
+        using_env_only = not config_path.exists()
 
         # Validate configuration
-        config = ConfigManager(config_path)
         if not config.validate_config():
-            click.echo("Error: Invalid configuration detected.")
+            click.echo("Error: No Alpaca API credentials found.")
             click.echo()
-            click.echo(config.get_config_summary())
-            click.echo()
-            click.echo("Run 'alpaca-mcp init' to fix configuration.")
+            if using_env_only:
+                click.echo("Provide credentials via environment variables:")
+                click.echo("   ALPACA_API_KEY=your_key_here")
+                click.echo("   ALPACA_SECRET_KEY=your_secret_here")
+                click.echo()
+                click.echo("Or run 'alpaca-mcp init' to create a .env file.")
+            else:
+                click.echo(config.get_config_summary())
+                click.echo()
+                click.echo("Update the credentials above or export them as environment variables.")
             sys.exit(1)
 
         # Display startup information (unless in stdio mode for MCP clients)
         if transport != "stdio":
             click.echo("Starting Alpaca MCP Server")
             click.echo(f"   Transport: {transport}")
-            click.echo(f"   Config: {config_path}")
+            source_hint = "environment variables" if using_env_only else config_path
+            click.echo(f"   Config: {source_hint}")
             if transport in ["http", "sse"]:
                 click.echo(f"   URL: http://{host}:{port}")
             click.echo()
