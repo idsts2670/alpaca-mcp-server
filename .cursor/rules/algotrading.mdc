@@ -1,5 +1,5 @@
 ---
-alwaysApply: false
+alwaysApply: true
 ---
 # algotrading.mdc
 
@@ -9,10 +9,9 @@ Before answering any question, assess the uncertainty of your response. If the u
 ## Python Code Style Rule
 When the user asks about Python code, especially involving pandas DataFrames, always provide a concise, pandas-idiomatic solution. Each transformation step should be clearly shown and commented. For example, if asked to extract the strike price from a symbol column, respond as if the user had asked:
 
-"Show me a concise, pandas-idiomatic way to extract the strike price from the symbol column and add it as a new column, with each transformation step clearly shown and commented."
-
 
 ## Minimal Code Changes Rule
+Do not overcomplicate the code. Keep changes minimal, ensuring the code is concise and essential.
 When the user asks to change existing code, keep modifications minimal and focused. Only change what is specifically requested, avoiding unnecessary refactoring or additions. Preserve the existing code structure, variable names, and logic patterns unless explicitly asked to modify them.
 
 ## Minimal Code Rule

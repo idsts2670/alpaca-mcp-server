@@ -1,21 +1,37 @@
 # Alpaca MCP Server
 
-This is a Model Context Protocol (MCP) server implementation for Alpaca's Trading API. It enables large language models (LLMs) on Claude Desktop, Cursor, or VScode to interact with Alpaca's trading infrastructure using natural language (English). This server supports stock trading, options trading, portfolio management, watchlist handling, and real-time market data access.
+A comprehensive Model Context Protocol (MCP) server for Alpaca's Trading API. Enable natural language trading operations through AI assistants like Claude Desktop, Cursor, and VS Code. Supports stocks, options, crypto, portfolio management, and real-time market data.
 
-## 🚀 Quick Installation
+## 🚀 Quick Start (New!)
+
+**One-click installation with uvx:**
 
 ```bash
-# Install the package
-uvx --from git+https://github.com/idsts2670/alpaca-mcp-server.git alpaca-mcp
-
-# Configure your credentials
-uvx --from git+https://github.com/idsts2670/alpaca-mcp-server.git alpaca-mcp init
+# Install and configure
+uvx alpaca-mcp-server init
 
 # Start the server
-uvx --from git+https://github.com/idsts2670/alpaca-mcp-server.git alpaca-mcp serve
+uvx alpaca-mcp-server serve
 ```
 
-**The init command will guide you through setting up your Alpaca API credentials and choosing between paper trading and live trading.**
+**That's it!** Then configure your MCP client:
+
+```json
+{
+  "mcpServers": {
+    "alpaca": {
+      "command": "uvx",
+      "args": ["alpaca-mcp-server", "serve"],
+      "env": {
+        "ALPACA_API_KEY": "your_api_key",
+        "ALPACA_SECRET_KEY": "your_secret_key"
+      }
+    }
+  }
+}
+```
+
+> 💡 **Upgrading from v0.x?** See the [Migration Guide](#migration-from-legacy-installation) below.
 
 ## Features
 
@@ -54,66 +70,135 @@ uvx --from git+https://github.com/idsts2670/alpaca-mcp-server.git alpaca-mcp ser
   - Query details for stocks, crypto, and other Alpaca-supported assets
   - Filter assets by status, class, exchange, and attributes
 
-## Quick Start with uvx
+## Installation Methods
 
-The fastest way to get started is using uvx, which automatically handles Python environment isolation:
+### 🔥 Method 1: uvx (Recommended)
+
+**Modern one-click installation:**
 
 ```bash
-# One time install of uv if needed
-# macOS or Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# Windows PowerShell
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Zero install run path that fetches and executes the CLI in an isolated environment
-uvx alpaca-mcp
-
-# Initialize credentials once to create .env
-alpaca-mcp init
+# Install and configure in one step
+uvx alpaca-mcp-server init
 
 # Start the server
+uvx alpaca-mcp-server serve
+```
+
+**Benefits:**
+- ✅ No Python environment management
+- ✅ Automatic dependency resolution
+- ✅ Works anywhere with Python 3.10+
+- ✅ Perfect for MCP client integration
+
+### 🐳 Method 2: Docker
+
+```bash
+# Run with Docker
+docker run -e ALPACA_API_KEY=your_key -e ALPACA_SECRET_KEY=your_secret alpaca/mcp-server
+```
+
+### 📦 Method 3: pip
+
+```bash
+# Install from PyPI
+pip install alpaca-mcp-server
+
+# Configure and run
+alpaca-mcp init
 alpaca-mcp serve
 ```
 
-## Getting Started (Alternative Setup)
-### 0. Prerequisites
+### 🔧 Method 4: Development Installation
 
-- Python 3.11+ (automatically handled by uvx)
-- Alpaca API keys (with paper or live trading access)
-- Claude for Desktop or another compatible MCP client
+```bash
+# Clone and install for development
+git clone https://github.com/idsts2670/alpaca-mcp-server
+cd alpaca-mcp-server
+pip install -e .
+```
 
-### 1. Manual Installation (for contributors)
+## Prerequisites
 
-If you prefer to work with the source code directly:
+- **Python 3.10+** (automatically handled by uvx)
+- **Alpaca API keys** (free paper trading account)
+- **MCP client** (Claude Desktop, Cursor, VS Code, etc.)
 
-1. Clone the repository and navigate to the directory:
-   ```bash
-   git clone https://github.com/alpacahq/alpaca-mcp-server.git
-   cd alpaca-mcp-server
-   ```
+## Getting Your API Keys
 
-2. Create and activate a virtual environment:
+1. Visit [Alpaca Markets](https://app.alpaca.markets/paper/dashboard/overview)
+2. Create a free paper trading account
+3. Generate API keys from the dashboard
+4. Use these keys when running `alpaca-mcp init`
 
-    **Prerequisites:** This project requires Python 3.11 or newer (MCP package requirement). If you don't have Python 3.11+, install it first:
-    - **macOS**: `brew install python@3.11`
-    - **Ubuntu/Debian**: `sudo apt install python3.11 python3.11-venv`
-    - **Windows**: Download from [python.org](https://www.python.org/downloads/)
+### What the Installer Does
 
-    **Using uv (recommended):**
+The `install.py` script automates the entire setup process:
 
-    ```bash
-    uv venv .venv --python 3.11
-    source .venv/bin/activate # On Windows: .venv\Scripts\activate
-    uv pip install -e .
-    ```
+1. **Check Prerequisites**
+   - Verifies `uv` is installed, prompts for installation if needed
+   - Supports curl, wget, brew, pipx, winget, or scoop
 
-    **Using pip (traditional):**
+2. **Create Virtual Environment**
+   - Creates isolated Python 3.10+ environment using `uv`
+   - Prevents conflicts with system Python
 
-    ```bash
-    python3.11 -m venv .venv  # Use python3.11 specifically
-    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-    pip install -e .
-    ``` 
+3. **Install Dependencies**
+   - Installs packages using `uv` for faster installation
+   - All dependencies contained in virtual environment
+
+4. **Select MCP Client**
+   - Choose between Claude Desktop or Cursor IDE
+   - Can run installer multiple times for both clients
+
+5. **Configure API Keys**
+   - Prompts for Alpaca API credentials
+   - Sets up paper trading by default (safe for testing)
+
+6. **Create Environment File**
+   - Generates `.env` file with API configuration
+   - Includes all necessary environment variables
+
+7. **Update Client Configuration**
+   - Automatically updates MCP client configuration
+   - Creates backups of existing configurations
+
+8. **Final Instructions**
+   - Provides next steps to restart client and test integration
+   - Includes manual testing commands
+
+**Benefits:**
+- No Python version conflicts (uv handles Python 3.10+ automatically)
+- Isolated environment prevents dependency conflicts
+- Cross-platform support (macOS, Linux, Windows)
+- Automatic client configuration
+- Safe defaults (paper trading enabled)
+- Backup creation for existing configurations
+
+## Advanced Instructions
+
+Manual installation.
+
+### 1. Installation
+
+ Create and activate a virtual environment and Install the required packages:
+
+  **Option A: Using pip (traditional)**
+
+  ```bash
+  python3 -m venv .venv
+  source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+  pip install -r requirements.txt
+  ```
+
+  **Option B: Using uv (modern, faster)**
+
+  To use uv, you'll first need to install it. See the [official uv installation guide](https://docs.astral.sh/uv/getting-started/installation/) for detailed installation instructions for your platform.
+  ```bash
+  uv venv .venv
+  source .venv/bin/activate # On Windows: .venv\Scripts\activate
+  uv pip install -r requirements.txt
+  ```
+  **Note:** The virtual environment will use the Python version that was used to create it. If you run the command with Python 3.10 or newer, your virtual environment will also use Python 3.10+. If you want to confirm the version, you can run `python3 --version` after activating the virtual environment. 
 
 
 ### Project Structure
@@ -137,26 +222,14 @@ alpaca-mcp-server/          ← This is the workspace folder (= project root)
 └── README.md
 ```
 
-### 2. Configure Credentials and Start Server
+### 2. Create and edit a .env file for your credentials in the project directory
 
-For the uvx workflow, use the interactive setup:
-
-```bash
-# Initialize credentials (creates .env file)
-alpaca-mcp init
-
-# Start the server
-alpaca-mcp serve
-```
-
-For manual installation, create the .env file:
-
-1. Copy the example environment file in the project root:
+1. Copy the example environment file in the project root by running this command:
    ```bash
    cp .env.example .env
    ```
 
-2. Replace the credentials in the `.env` file:
+2. Replace the credentials (e.g. API keys) in the `.env` file:
 
    ```
    ALPACA_API_KEY = "your_alpaca_api_key_for_paper_account"
@@ -170,16 +243,16 @@ For manual installation, create the .env file:
 
 ### 3. Start the MCP Server
 
-**With uvx:**
+Open a terminal in the project root directory and run the following command:
+
+**For local usage (default - stdio transport):**
 ```bash
-alpaca-mcp serve                    # Default stdio transport
-alpaca-mcp serve --transport http   # HTTP transport for remote connections
+python alpaca_mcp_server.py
 ```
 
-**With manual installation:**
+**For remote usage (HTTP transport):**
 ```bash
-python alpaca_mcp_server.py                    # Default stdio transport
-python alpaca_mcp_server.py --transport http   # HTTP transport
+python alpaca_mcp_server.py --transport http
 ```
 
 **Available transport options:**
@@ -236,20 +309,42 @@ To enable **live trading with real funds**, update the following configuration f
 
 Below you'll find step-by-step guides for connecting the Alpaca MCP server to various MCP clients. Choose the section that matches your preferred development environment or AI assistant.
 
-### Claude Desktop Usage
+### Claude Desktop Configuration
 
-To use Alpaca MCP Server with Claude Desktop, please follow the steps below. The official Claude Desktop setup document is available here: https://modelcontextprotocol.io/quickstart/user
+#### Method 1: uvx (Recommended)
 
-#### Configure Claude Desktop
+**Simple and modern approach:**
 
-1. Open Claude Desktop
-2. Navigate to: `Settings → Developer → Edit Config`
-3. Update your `claude_desktop_config.json`:
+1. Install and configure the server:
+   ```bash
+   uvx alpaca-mcp-server init
+   ```
 
-  **Note:**\
-    Replace <project_root> with the path to your cloned alpaca-mcp-server directory. This should point to the Python executable inside the virtual environment you created with `python3 -m venv venv` in the terminal.
+2. Open Claude Desktop → Settings → Developer → Edit Config
 
-**For local usage (stdio transport - recommended):**
+3. Add this configuration:
+   ```json
+   {
+     "mcpServers": {
+       "alpaca": {
+         "command": "uvx",
+         "args": ["alpaca-mcp-server", "serve"],
+         "env": {
+           "ALPACA_API_KEY": "your_alpaca_api_key",
+           "ALPACA_SECRET_KEY": "your_alpaca_secret_key"
+         }
+       }
+     }
+   }
+   ```
+
+4. Restart Claude Desktop and start trading!
+
+#### Method 2: Legacy Installation (Deprecated)
+
+> ⚠️ **This method is deprecated.** Please use the uvx method above for new installations.
+
+**For existing installations (stdio transport):**
 ```json
 {
   "mcpServers": {
@@ -757,6 +852,135 @@ This server can place real trades and access your portfolio. Treat your API keys
 ## Usage Analytics Notice
 
 The user agent for API calls defaults to 'ALPACA-MCP-SERVER' to help Alpaca identify MCP server usage and improve user experience. You can opt out by modifying the 'USER_AGENT' constant in '.github/core/user_agent_mixin.py' or by removing the 'UserAgentMixin' from the client class definitions in 'alpaca_mcp_server.py' — though we kindly hope you'll keep it enabled to support ongoing improvements.
+
+## Migration from Legacy Installation
+
+If you're upgrading from the previous version that used `install.py`, follow these steps:
+
+### Quick Migration (Recommended)
+
+1. **Install the new version:**
+   ```bash
+   uvx alpaca-mcp-server init
+   ```
+
+2. **Update your MCP client configuration** to use uvx:
+   ```json
+   {
+     "mcpServers": {
+       "alpaca": {
+         "command": "uvx",
+         "args": ["alpaca-mcp-server", "serve"],
+         "env": {
+           "ALPACA_API_KEY": "your_api_key",
+           "ALPACA_SECRET_KEY": "your_secret_key"
+         }
+       }
+     }
+   }
+   ```
+
+3. **Restart your MCP client** and test the connection.
+
+### Detailed Migration Steps
+
+#### From Legacy install.py Setup
+
+**Old method (deprecated):**
+```bash
+# Legacy approach
+git clone https://github.com/idsts2670/alpaca-mcp-server
+cd alpaca-mcp-server
+python install.py
+```
+
+**New method:**
+```bash
+# Modern approach
+uvx alpaca-mcp-server init
+```
+
+#### Configuration File Migration
+
+Your existing `.env` file will work with the new installation. The new CLI will:
+- ✅ Automatically detect existing `.env` files
+- ✅ Preserve your API keys and settings
+- ✅ Add any missing configuration options
+
+#### MCP Client Configuration Changes
+
+**Before (legacy):**
+```json
+{
+  "mcpServers": {
+    "alpaca": {
+      "command": "/path/to/venv/bin/python",
+      "args": ["/path/to/alpaca_mcp_server.py"],
+      "env": { ... }
+    }
+  }
+}
+```
+
+**After (modern):**
+```json
+{
+  "mcpServers": {
+    "alpaca": {
+      "command": "uvx",
+      "args": ["alpaca-mcp-server", "serve"],
+      "env": { ... }
+    }
+  }
+}
+```
+
+### Benefits of Upgrading
+
+- 🚀 **Faster installation** - No more virtual environment management
+- 🔄 **Automatic updates** - uvx handles dependencies
+- 🛠️ **Better CLI** - Professional command-line interface
+- 📦 **Registry integration** - Listed in MCP directories
+- 🐛 **Improved reliability** - Fewer installation issues
+
+### Backward Compatibility
+
+The legacy `install.py` script still works but shows deprecation warnings:
+```bash
+python install.py  # Still works, but deprecated
+```
+
+For production use, please migrate to the uvx installation method.
+
+### Troubleshooting Migration
+
+**Issue:** `command not found: uvx`
+```bash
+# Install uvx first
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Then restart your shell and try again
+```
+
+**Issue:** Existing configuration not working
+```bash
+# Check configuration
+alpaca-mcp status
+
+# Reconfigure if needed
+alpaca-mcp init
+```
+
+**Issue:** MCP client can't find the server
+- Make sure you updated the client configuration to use `uvx`
+- Restart your MCP client after configuration changes
+- Check that uvx is in your PATH
+
+### Support
+
+If you encounter issues during migration:
+1. Check the [troubleshooting guide](#troubleshooting-migration) above
+2. Review your MCP client logs
+3. [Open an issue](https://github.com/idsts2670/alpaca-mcp-server/issues) with your configuration details
 
 ## License
 
