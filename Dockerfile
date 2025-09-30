@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Copy project files
-COPY pyproject.toml requirements.txt ./
+COPY pyproject.toml requirements.txt README.md ./
 COPY src/ ./src/
 COPY alpaca_mcp_server.py ./
 
