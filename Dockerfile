@@ -24,8 +24,7 @@ COPY .github/core/user_agent_mixin.py ./user_agent_mixin.py
 # Install Python dependencies
 # Use pip instead of uvx for container environment
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir . && \
-    rm -f alpaca_mcp_server.py
+    pip install --no-cache-dir .
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash alpaca && \
