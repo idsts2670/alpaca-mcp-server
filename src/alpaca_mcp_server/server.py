@@ -6,6 +6,8 @@
 
 import os
 import sys
+import importlib
+import importlib.util
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -108,44 +110,54 @@ class AlpacaMCPServer:
         This approach maintains backward compatibility by reusing the existing
         comprehensive tool implementations without code duplication.
         """
-        # Add the project root to Python path to import the original server
-        project_root = Path(__file__).parent.parent.parent
+        module_names = ["legacy_alpaca_mcp_server", "alpaca_mcp_server"]
+        original_server = None
 
-        candidate_paths = [
-            project_root / "legacy_alpaca_mcp_server.py",
-            project_root / "alpaca_mcp_server.py",
-        ]
+        for name in module_names:
+            try:
+                spec = importlib.util.find_spec(name)
+            except (ImportError, ValueError):
+                spec = None
 
-        scripts_dir = project_root / "legacy"
-        if scripts_dir.exists():
-            candidate_paths.append(scripts_dir / "legacy_alpaca_mcp_server.py")
-            candidate_paths.append(scripts_dir / "alpaca_mcp_server.py")
+            if spec is not None:
+                original_server = importlib.import_module(name)
+                break
 
-        original_server_path = next((path for path in candidate_paths if path.exists()), None)
+        if original_server is None:
+            # Fallback to loading from local filesystem when running from source checkout
+            project_root = Path(__file__).parent.parent.parent
+            candidate_paths = [
+                project_root / "legacy_alpaca_mcp_server.py",
+                project_root / "alpaca_mcp_server.py",
+            ]
+            scripts_dir = project_root / "legacy"
+            if scripts_dir.exists():
+                candidate_paths.extend([
+                    scripts_dir / "legacy_alpaca_mcp_server.py",
+                    scripts_dir / "alpaca_mcp_server.py",
+                ])
 
-        if original_server_path is None:
-            raise FileNotFoundError(
-                "Original server file not found. Expected one of: legacy_alpaca_mcp_server.py, "
-                "alpaca_mcp_server.py"
-            )
+            original_server_path = next((path for path in candidate_paths if path.exists()), None)
 
-        if str(project_root) not in sys.path:
-            sys.path.insert(0, str(project_root))
+            if original_server_path is None:
+                raise FileNotFoundError(
+                    "Original server file not found. Expected one of: legacy_alpaca_mcp_server.py, "
+                    "alpaca_mcp_server.py"
+                )
 
-        try:
-            module_name = original_server_path.stem
-            original_server = __import__(module_name)
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
 
-            if hasattr(original_server, 'mcp'):
-                self.mcp = original_server.mcp
-            else:
-                raise RuntimeError("Original server module does not have 'mcp' instance")
+            try:
+                original_server = importlib.import_module(original_server_path.stem)
+            finally:
+                if str(project_root) in sys.path:
+                    sys.path.remove(str(project_root))
 
-        except ImportError as e:
-            raise ImportError(f"Failed to import original server implementation: {e}")
-        finally:
-            if str(project_root) in sys.path:
-                sys.path.remove(str(project_root))
+        if not hasattr(original_server, 'mcp'):
+            raise RuntimeError("Original server module does not have 'mcp' instance")
+
+        self.mcp = original_server.mcp
 
     def run(self, transport: str = "stdio", host: str = "127.0.0.1", port: int = 8000) -> None:
         """

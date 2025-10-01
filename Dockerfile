@@ -24,25 +24,7 @@ COPY .github/core .github/core
 # Install Python dependencies
 # Use pip instead of uvx for container environment
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir . && \
-    python - <<'PY'
-import pathlib
-import shutil
-import sysconfig
-
-purelib = pathlib.Path(sysconfig.get_paths()["purelib"])
-legacy_src = pathlib.Path("/app/legacy_alpaca_mcp_server.py")
-if legacy_src.exists():
-    shutil.copy(legacy_src, purelib / legacy_src.name)
-
-github_core_src = pathlib.Path("/app/.github/core")
-if github_core_src.exists():
-    github_core_dest = purelib / ".github" / "core"
-    github_core_dest.mkdir(parents=True, exist_ok=True)
-    for item in github_core_src.iterdir():
-        if item.is_file():
-            shutil.copy(item, github_core_dest / item.name)
-PY
+    pip install --no-cache-dir .
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash alpaca && \
