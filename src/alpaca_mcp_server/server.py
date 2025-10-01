@@ -88,8 +88,13 @@ class AlpacaMCPServer:
         This method dynamically imports the original server implementation
         to maintain all existing functionality while providing a clean interface.
         """
-        # Validate credentials before initializing
-        if not self._validate_credentials():
+        # Check if we're in tool discovery mode (for MCP catalog generation)
+        # In this mode, we allow server initialization without valid credentials
+        # since we're only listing available tools, not executing them
+        discovery_mode = os.getenv("MCP_DISCOVERY_MODE", "false").lower() == "true"
+
+        # Validate credentials before initializing (unless in discovery mode)
+        if not discovery_mode and not self._validate_credentials():
             raise ValueError("Invalid or missing Alpaca API credentials")
 
         # Detect appropriate log level
