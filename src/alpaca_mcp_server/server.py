@@ -111,42 +111,32 @@ class AlpacaMCPServer:
         # Add the project root to Python path to import the original server
         project_root = Path(__file__).parent.parent.parent
 
-        legacy_filenames = [
-            "legacy_alpaca_mcp_server.py",
-            "alpaca_mcp_server.py"
+        candidate_paths = [
+            project_root / "legacy_alpaca_mcp_server.py",
+            project_root / "alpaca_mcp_server.py",
         ]
 
-        original_server_path = None
-        for candidate in legacy_filenames:
-            path = project_root / candidate
-            if path.exists():
-                original_server_path = path
-                break
+        scripts_dir = project_root / "legacy"
+        if scripts_dir.exists():
+            candidate_paths.append(scripts_dir / "legacy_alpaca_mcp_server.py")
+            candidate_paths.append(scripts_dir / "alpaca_mcp_server.py")
+
+        original_server_path = next((path for path in candidate_paths if path.exists()), None)
 
         if original_server_path is None:
             raise FileNotFoundError(
-                "Original server file not found. Expected one of: "
-                + ", ".join(legacy_filenames)
+                "Original server file not found. Expected one of: legacy_alpaca_mcp_server.py, "
+                "alpaca_mcp_server.py"
             )
-
-        # Add the directory containing the legacy module to the Python path temporarily
-        legacy_dir = original_server_path.parent
 
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
-        if str(legacy_dir) not in sys.path:
-            sys.path.insert(0, str(legacy_dir))
 
         try:
-            # Import the original server module
-            # This will execute all the tool registrations on our mcp instance
             module_name = original_server_path.stem
             original_server = __import__(module_name)
 
-            # Copy the configured mcp instance with all registered tools
-            # The original server module registers tools on a global 'mcp' variable
             if hasattr(original_server, 'mcp'):
-                # Transfer all registered tools to our instance
                 self.mcp = original_server.mcp
             else:
                 raise RuntimeError("Original server module does not have 'mcp' instance")
@@ -154,11 +144,8 @@ class AlpacaMCPServer:
         except ImportError as e:
             raise ImportError(f"Failed to import original server implementation: {e}")
         finally:
-            # Clean up path
             if str(project_root) in sys.path:
                 sys.path.remove(str(project_root))
-            if str(legacy_dir) in sys.path:
-                sys.path.remove(str(legacy_dir))
 
     def run(self, transport: str = "stdio", host: str = "127.0.0.1", port: int = 8000) -> None:
         """
