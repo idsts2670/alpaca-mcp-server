@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y \
 # Copy project files
 COPY pyproject.toml requirements.txt README.md ./
 COPY src/ ./src/
-COPY alpaca_mcp_server.py ./legacy_alpaca_mcp_server.py
 COPY .github/core .github/core
 
 # Install Python dependencies
@@ -38,7 +37,7 @@ ENV PYTHONUNBUFFERED=1
 
 # Health check to verify the server can import properly
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import alpaca_mcp_server; print('Health check passed')" || exit 1
+    CMD python -c "from alpaca_mcp_server import server; print('Health check passed')" || exit 1
 
 # Expose port for HTTP transport (optional)
 EXPOSE 8000
