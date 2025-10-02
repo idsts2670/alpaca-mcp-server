@@ -118,9 +118,6 @@ DATA_API_URL = os.getenv("DATA_API_URL")
 STREAM_DATA_WSS = os.getenv("STREAM_DATA_WSS")
 DEBUG = os.getenv("DEBUG", "False")
 
-# Check if we're in discovery mode (for MCP catalog generation)
-MCP_DISCOVERY_MODE = os.getenv("MCP_DISCOVERY_MODE", "false").lower() == "true"
-
 # Initialize log level
 def detect_pycharm_environment():
     """Detect if we're running in PyCharm using environment variable."""
@@ -134,29 +131,20 @@ log_level = "DEBUG" if DEBUG.lower() == "true" else log_level
 # Initialize FastMCP server
 mcp = FastMCP("alpaca-trading", log_level=log_level)
 
-# Initialize Alpaca clients (only if NOT in discovery mode)
-trade_client = None
-stock_historical_data_client = None
-stock_data_stream_client = None
-option_historical_data_client = None
-corporate_actions_client = None
-crypto_historical_data_client = None
+# Check if keys are available
+if not TRADE_API_KEY or not TRADE_API_SECRET:
+    raise ValueError("Alpaca API credentials not found in environment variables.")
 
-if not MCP_DISCOVERY_MODE:
-    # Check if keys are available
-    if not TRADE_API_KEY or not TRADE_API_SECRET:
-        raise ValueError("Alpaca API credentials not found in environment variables.")
+# Convert string to boolean
+ALPACA_PAPER_TRADE_BOOL = ALPACA_PAPER_TRADE.lower() not in ['false', '0', 'no', 'off']
 
-    # Convert string to boolean
-    ALPACA_PAPER_TRADE_BOOL = ALPACA_PAPER_TRADE.lower() not in ['false', '0', 'no', 'off']
-
-    # Initialize clients
-    trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)
-    stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
-    stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_override=STREAM_DATA_WSS)
-    option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-    corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
-    crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+# Initialize Alpaca clients
+trade_client = TradingClientSigned(TRADE_API_KEY, TRADE_API_SECRET, paper=ALPACA_PAPER_TRADE_BOOL)
+stock_historical_data_client = StockHistoricalDataClientSigned(TRADE_API_KEY, TRADE_API_SECRET)
+stock_data_stream_client = StockDataStream(TRADE_API_KEY, TRADE_API_SECRET, url_override=STREAM_DATA_WSS)
+option_historical_data_client = OptionHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+corporate_actions_client = CorporateActionsClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
+crypto_historical_data_client = CryptoHistoricalDataClientSigned(api_key=TRADE_API_KEY, secret_key=TRADE_API_SECRET)
 
 # ============================================================================
 # Helper Functions
